@@ -626,19 +626,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         alert.messageText = "\(Constants.appName)"
         alert.informativeText = """
+            "Life is like spaghetti, it's hard until you make it"
+            (Tommy Cash)
+
             A tiny menu-bar barista that keeps your Mac from dozing off.
 
             • Left-click the icon to pull a shot
             • Right-click for the full menu
-            • Pick a preset, set a default, or brew for specific apps
 
             Under the hood it's just /usr/bin/caffeinate with a
             friendlier face.
 
-            "Life is like spaghetti, it's hard until you make it"
-            (Tommy Cash)
-
-            by Luca Gibelli
+            App by Luca Gibelli
             """
         alert.alertStyle = .informational
         alert.icon = aboutDialogIcon()
