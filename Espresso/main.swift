@@ -634,6 +634,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             Under the hood it's just /usr/bin/caffeinate with a
             friendlier face.
+
+            "Life is like spaghetti, it's hard until you make it"
+
+            by Luca Gibelli
             """
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
