@@ -43,12 +43,17 @@ Edit `build.sh` and uncomment the Universal Binary section to build for both App
 
 ## How It Works
 
-Espresso wraps the macOS `caffeinate` command with a native menu bar interface. The `caffeinate` utility prevents the system from sleeping by asserting power management flags:
+Espresso talks directly to macOS power management via IOKit's
+`IOPMAssertionCreateWithName`, taking out the same assertions that
+`/usr/bin/caffeinate` uses internally:
 
-- `-i` prevents idle sleep
-- `-s` prevents system sleep on AC power
-- `-d` prevents display sleep (optional)
-- `-t N` sets a timeout in seconds
+- `kIOPMAssertionTypePreventUserIdleSystemSleep` — keeps the Mac awake while the user is idle
+- `kIOPMAssertionTypePreventSystemSleep` — prevents deep system sleep (on AC power)
+- `kIOPMAssertionTypePreventUserIdleDisplaySleep` — optional, keeps the display on
+
+Because it uses the public IOKit API instead of spawning a subprocess,
+the app works cleanly inside the App Sandbox and never leaves orphan
+child processes behind if it crashes or is force-quit.
 
 ## Uninstall
 

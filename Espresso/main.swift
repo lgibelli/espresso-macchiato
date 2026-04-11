@@ -1,4 +1,5 @@
 import Cocoa
+import IOKit.pwr_mgt
 import ServiceManagement
 
 // MARK: - App Entry Point
@@ -77,9 +78,22 @@ class Preferences {
     }
 }
 
-// MARK: - Caffeinate Manager
-class CaffeinateManager {
-    private var process: Process?
+// MARK: - Power Assertion Manager
+//
+// Holds IOKit power-management assertions to keep the Mac (and optionally
+// the display) awake. This is what /usr/bin/caffeinate does under the hood;
+// by talking to IOKit directly we avoid spawning a subprocess at all, which:
+//   - works inside the App Sandbox (no `com.apple.security.temporary-exception`
+//     hoops, no banned Process launches)
+//   - eliminates the old terminationHandler race entirely — there's no
+//     child process whose death could race the UI
+//   - can't leak an orphan child if the app is killed
+class PowerAssertionManager {
+    /// Currently-held IOKit assertion IDs. Multiple at a time because we
+    /// mirror `caffeinate -is [-d]`: two system-sleep assertions + an
+    /// optional display-sleep one.
+    private var assertionIDs: [IOPMAssertionID] = []
+
     private(set) var isActive = false
     private(set) var remainingSeconds: Int = 0
     private(set) var totalSeconds: Int = 0
@@ -91,74 +105,73 @@ class CaffeinateManager {
     func activate(duration: Int = 0, preventDisplaySleep: Bool = false) {
         deactivate()
 
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/caffeinate")
-
-        var args: [String] = []
-        // -i: prevent idle sleep, -s: prevent system sleep on AC
-        args.append("-is")
+        // Mirrors `caffeinate -i -s [-d]`:
+        //   -i → PreventUserIdleSystemSleep  (keep Mac awake while user idle)
+        //   -s → PreventSystemSleep          (prevent deep system sleep on AC)
+        //   -d → PreventUserIdleDisplaySleep (keep display on)
+        var types: [String] = [
+            kIOPMAssertionTypePreventUserIdleSystemSleep,
+            kIOPMAssertionTypePreventSystemSleep,
+        ]
         if preventDisplaySleep {
-            // -d: prevent display sleep
-            args.append("-d")
+            types.append(kIOPMAssertionTypePreventUserIdleDisplaySleep)
         }
-        if duration > 0 {
-            args.append("-t")
-            args.append("\(duration)")
-        }
-        task.arguments = args
 
-        task.terminationHandler = { [weak self, weak task] _ in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                // Guard against a stale handler from a previously-terminated
-                // process stomping on the state of a freshly-started one.
-                // Without this, "activate → re-activate" flips the UI off even
-                // though the new caffeinate subprocess is still running.
-                guard self.process === task else { return }
-                self.countdownTimer?.invalidate()
-                self.countdownTimer = nil
-                self.process = nil
-                self.isActive = false
-                self.remainingSeconds = 0
-                self.totalSeconds = 0
-                self.onStateChanged?()
+        let reason = "Espresso is keeping your Mac awake" as CFString
+        var createdIDs: [IOPMAssertionID] = []
+
+        for type in types {
+            var id: IOPMAssertionID = IOPMAssertionID(0)
+            let result = IOPMAssertionCreateWithName(
+                type as CFString,
+                IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                reason,
+                &id
+            )
+            if result == kIOReturnSuccess {
+                createdIDs.append(id)
+            } else {
+                // Partial failure: roll back any assertions we managed to
+                // create so we don't end up in a half-active state.
+                for leaked in createdIDs { IOPMAssertionRelease(leaked) }
+                print("IOPMAssertionCreateWithName failed for \(type): 0x\(String(result, radix: 16))")
+                return
             }
         }
 
-        do {
-            try task.run()
-            process = task
-            isActive = true
-            totalSeconds = duration
-            remainingSeconds = duration
+        assertionIDs = createdIDs
+        isActive = true
+        totalSeconds = duration
+        remainingSeconds = duration
 
-            if duration > 0 {
-                countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-                    guard let self = self, self.isActive else { return }
-                    if self.remainingSeconds > 0 {
-                        self.remainingSeconds -= 1
-                        self.onTimerTick?()
-                    }
-                    if self.remainingSeconds <= 0 {
-                        self.countdownTimer?.invalidate()
-                        self.countdownTimer = nil
-                    }
+        if duration > 0 {
+            countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                guard let self = self, self.isActive else { return }
+                if self.remainingSeconds > 0 {
+                    self.remainingSeconds -= 1
+                    self.onTimerTick?()
+                }
+                if self.remainingSeconds <= 0 {
+                    // Time's up — release assertions and go idle. Unlike the
+                    // old caffeinate path, the release is synchronous so no
+                    // async terminationHandler can race the state.
+                    self.deactivate()
                 }
             }
-
-            onStateChanged?()
-        } catch {
-            print("Failed to launch caffeinate: \(error)")
         }
+
+        onStateChanged?()
     }
 
     func deactivate() {
         countdownTimer?.invalidate()
         countdownTimer = nil
-        if let proc = process, proc.isRunning {
-            proc.terminate()
+
+        for id in assertionIDs {
+            IOPMAssertionRelease(id)
         }
-        process = nil
+        assertionIDs = []
+
         isActive = false
         remainingSeconds = 0
         totalSeconds = 0
@@ -263,7 +276,7 @@ class AppWatcher {
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var menu: NSMenu!
-    private let caffeinateManager = CaffeinateManager()
+    private let powerManager = PowerAssertionManager()
     private let appWatcher = AppWatcher()
     private let prefs = Preferences.shared
     private var autoActivatedByApp = false
@@ -279,7 +292,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        caffeinateManager.deactivate()
+        powerManager.deactivate()
         appWatcher.stopWatching()
     }
 
@@ -306,7 +319,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             // Left-click: toggle with default duration
             let duration = prefs.defaultDuration
-            caffeinateManager.toggle(
+            powerManager.toggle(
                 duration: duration,
                 preventDisplaySleep: prefs.preventDisplaySleep
             )
@@ -316,16 +329,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateStatusIcon() {
         guard let button = statusItem.button else { return }
 
-        if caffeinateManager.isActive {
+        if powerManager.isActive {
             if #available(macOS 11.0, *) {
                 button.image = NSImage(systemSymbolName: Constants.activeIcon, accessibilityDescription: "Active")
             } else {
                 button.title = "☕️"
             }
 
-            if prefs.showTimerInBar && caffeinateManager.totalSeconds > 0 {
-                button.title = " \(caffeinateManager.formattedTimeRemaining)"
-            } else if prefs.showTimerInBar && caffeinateManager.totalSeconds == 0 {
+            if prefs.showTimerInBar && powerManager.totalSeconds > 0 {
+                button.title = " \(powerManager.formattedTimeRemaining)"
+            } else if prefs.showTimerInBar && powerManager.totalSeconds == 0 {
                 button.title = " ∞"
             } else {
                 button.title = ""
@@ -342,11 +355,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Callbacks
     private func setupCaffeinateCallbacks() {
-        caffeinateManager.onStateChanged = { [weak self] in
+        powerManager.onStateChanged = { [weak self] in
             self?.updateStatusIcon()
             self?.buildMenu()
         }
-        caffeinateManager.onTimerTick = { [weak self] in
+        powerManager.onTimerTick = { [weak self] in
             self?.updateStatusIcon()
             self?.updateTimerMenuItem()
         }
@@ -357,9 +370,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         appWatcher.updateWatchedApps(prefs.watchedApps)
 
         appWatcher.onWatchedAppLaunched = { [weak self] bundleID in
-            guard let self = self, !self.caffeinateManager.isActive else { return }
+            guard let self = self, !self.powerManager.isActive else { return }
             self.autoActivatedByApp = true
-            self.caffeinateManager.activate(
+            self.powerManager.activate(
                 duration: 0,
                 preventDisplaySleep: self.prefs.preventDisplaySleep
             )
@@ -370,7 +383,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // Only deactivate if no other watched apps are running
             if !self.appWatcher.isAnyWatchedAppRunning() {
                 self.autoActivatedByApp = false
-                self.caffeinateManager.deactivate()
+                self.powerManager.deactivate()
             }
         }
 
@@ -379,7 +392,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Check if any watched app is already running at launch
         if appWatcher.isAnyWatchedAppRunning() {
             autoActivatedByApp = true
-            caffeinateManager.activate(
+            powerManager.activate(
                 duration: 0,
                 preventDisplaySleep: prefs.preventDisplaySleep
             )
@@ -391,7 +404,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu = NSMenu()
 
         // Status header
-        let statusLabel = caffeinateManager.isActive
+        let statusLabel = powerManager.isActive
             ? "Espresso — Pulling a shot"
             : "Espresso — Machine is cold"
         let statusItem = NSMenuItem(title: statusLabel, action: nil, keyEquivalent: "")
@@ -404,15 +417,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(statusItem)
 
         // Timer remaining (if active with duration)
-        if caffeinateManager.isActive && caffeinateManager.totalSeconds > 0 {
+        if powerManager.isActive && powerManager.totalSeconds > 0 {
             let timerItem = NSMenuItem(
-                title: "   Shot ends in \(caffeinateManager.formattedTimeRemaining)",
+                title: "   Shot ends in \(powerManager.formattedTimeRemaining)",
                 action: nil, keyEquivalent: ""
             )
             timerItem.isEnabled = false
             timerItem.tag = 999  // tag for updating
             menu.addItem(timerItem)
-        } else if caffeinateManager.isActive && caffeinateManager.totalSeconds == 0 {
+        } else if powerManager.isActive && powerManager.totalSeconds == 0 {
             let timerItem = NSMenuItem(title: "   Bottomless cup — running until stopped", action: nil, keyEquivalent: "")
             timerItem.isEnabled = false
             menu.addItem(timerItem)
@@ -421,7 +434,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem.separator())
 
         // Toggle
-        let toggleTitle = caffeinateManager.isActive ? "Stop Brewing" : "Start Brewing"
+        let toggleTitle = powerManager.isActive ? "Stop Brewing" : "Start Brewing"
         let toggleItem = NSMenuItem(title: toggleTitle, action: #selector(toggleAction), keyEquivalent: "b")
         toggleItem.target = self
         menu.addItem(toggleItem)
@@ -433,7 +446,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             item.target = self
             item.tag = d.rawValue
             item.representedObject = d
-            if caffeinateManager.isActive && caffeinateManager.totalSeconds == d.rawValue {
+            if powerManager.isActive && powerManager.totalSeconds == d.rawValue {
                 item.state = .on
             }
             durationMenu.addItem(item)
@@ -551,12 +564,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateTimerMenuItem() {
         guard let item = menu.item(withTag: 999) else { return }
-        item.title = "   Shot ends in \(caffeinateManager.formattedTimeRemaining)"
+        item.title = "   Shot ends in \(powerManager.formattedTimeRemaining)"
     }
 
     // MARK: - Actions
     @objc private func toggleAction() {
-        caffeinateManager.toggle(
+        powerManager.toggle(
             duration: prefs.defaultDuration,
             preventDisplaySleep: prefs.preventDisplaySleep
         )
@@ -564,7 +577,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func activateWithDuration(_ sender: NSMenuItem) {
         let duration = sender.tag
-        caffeinateManager.activate(
+        powerManager.activate(
             duration: duration,
             preventDisplaySleep: prefs.preventDisplaySleep
         )
@@ -577,12 +590,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleDisplaySleep(_ sender: NSMenuItem) {
         prefs.preventDisplaySleep.toggle()
-        // Restart caffeinate if active to apply new setting
-        if caffeinateManager.isActive {
-            let remaining = caffeinateManager.remainingSeconds
-            let total = caffeinateManager.totalSeconds
-            caffeinateManager.deactivate()
-            caffeinateManager.activate(
+        // Rebuild assertions if active so the new "prevent display sleep"
+        // setting takes effect immediately.
+        if powerManager.isActive {
+            let remaining = powerManager.remainingSeconds
+            let total = powerManager.totalSeconds
+            powerManager.deactivate()
+            powerManager.activate(
                 duration: total > 0 ? remaining : 0,
                 preventDisplaySleep: prefs.preventDisplaySleep
             )
@@ -634,8 +648,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             • Left-click the icon to pull a shot
             • Right-click for the full menu
 
-            Under the hood it's just /usr/bin/caffeinate with a
-            friendlier face.
+            Under the hood it talks to macOS power management directly
+            via IOKit — no subprocess, no magic.
 
             App by Luca Gibelli
             """
@@ -671,7 +685,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func quitApp() {
-        caffeinateManager.deactivate()
+        powerManager.deactivate()
         NSApp.terminate(nil)
     }
 
