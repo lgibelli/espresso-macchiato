@@ -715,12 +715,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let launchAgentDir = FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library/LaunchAgents")
             let plistPath = launchAgentDir
-                .appendingPathComponent("com.espresso.app.plist")
+                .appendingPathComponent("com.nervoussystems.espressomacchiato.plist")
 
             if enabled {
                 guard let appPath = Bundle.main.bundlePath as String? else { return }
                 let plist: [String: Any] = [
-                    "Label": "com.espresso.app",
+                    "Label": "com.nervoussystems.espressomacchiato",
                     "ProgramArguments": ["\(appPath)/Contents/MacOS/Espresso"],
                     "RunAtLoad": true,
                 ]

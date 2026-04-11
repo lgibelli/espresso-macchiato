@@ -59,4 +59,4 @@ child processes behind if it crashes or is force-quit.
 
 1. Quit Espresso from the menu bar
 2. Delete `Espresso.app` from Applications
-3. If you enabled Launch at Login on older macOS, remove: `~/Library/LaunchAgents/com.espresso.app.plist`
+3. If you enabled Launch at Login on older macOS, remove: `~/Library/LaunchAgents/com.nervoussystems.espressomacchiato.plist`
