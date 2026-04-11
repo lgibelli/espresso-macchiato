@@ -636,13 +636,39 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             friendlier face.
 
             "Life is like spaghetti, it's hard until you make it"
+            (Tommy Cash)
 
             by Luca Gibelli
             """
         alert.alertStyle = .informational
+        alert.icon = aboutDialogIcon()
         alert.addButton(withTitle: "OK")
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
+    }
+
+    /// Build a nice big coffee-cup glyph for the About dialog so it doesn't
+    /// fall back to the generic "unbundled app" placeholder icon.
+    private func aboutDialogIcon() -> NSImage {
+        let size = NSSize(width: 128, height: 128)
+        let config = NSImage.SymbolConfiguration(pointSize: 96, weight: .regular)
+            .applying(.init(paletteColors: [.systemBrown, .white]))
+        let symbol = NSImage(systemSymbolName: "cup.and.saucer.fill",
+                             accessibilityDescription: "Espresso")?
+            .withSymbolConfiguration(config)
+
+        // Render into a fixed-size bitmap so NSAlert resizes predictably.
+        let image = NSImage(size: size)
+        image.lockFocus()
+        defer { image.unlockFocus() }
+        if let symbol = symbol {
+            let rect = NSRect(origin: .zero, size: size)
+            symbol.draw(in: rect.insetBy(dx: 8, dy: 8),
+                        from: .zero,
+                        operation: .sourceOver,
+                        fraction: 1.0)
+        }
+        return image
     }
 
     @objc private func quitApp() {
