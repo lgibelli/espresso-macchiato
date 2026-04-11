@@ -32,13 +32,13 @@ enum Duration: Int, CaseIterable {
 
     var label: String {
         switch self {
-        case .minutes5: return "5 Minutes"
-        case .minutes15: return "15 Minutes"
-        case .minutes30: return "30 Minutes"
-        case .hour1: return "1 Hour"
-        case .hours2: return "2 Hours"
-        case .hours5: return "5 Hours"
-        case .indefinite: return "Indefinitely"
+        case .minutes5:    return "5 min"
+        case .minutes15:   return "15 min"
+        case .minutes30:   return "30 min"
+        case .hour1:       return "1 hour"
+        case .hours2:      return "2 hours"
+        case .hours5:      return "5 hours"
+        case .indefinite:  return "Until I stop it"
         }
     }
 }
@@ -391,7 +391,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu = NSMenu()
 
         // Status header
-        let statusLabel = caffeinateManager.isActive ? "Espresso is Active" : "Espresso is Inactive"
+        let statusLabel = caffeinateManager.isActive
+            ? "Espresso — Pulling a shot"
+            : "Espresso — Machine is cold"
         let statusItem = NSMenuItem(title: statusLabel, action: nil, keyEquivalent: "")
         statusItem.isEnabled = false
         let font = NSFont.boldSystemFont(ofSize: 13)
@@ -404,14 +406,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Timer remaining (if active with duration)
         if caffeinateManager.isActive && caffeinateManager.totalSeconds > 0 {
             let timerItem = NSMenuItem(
-                title: "  Time remaining: \(caffeinateManager.formattedTimeRemaining)",
+                title: "   Shot ends in \(caffeinateManager.formattedTimeRemaining)",
                 action: nil, keyEquivalent: ""
             )
             timerItem.isEnabled = false
             timerItem.tag = 999  // tag for updating
             menu.addItem(timerItem)
         } else if caffeinateManager.isActive && caffeinateManager.totalSeconds == 0 {
-            let timerItem = NSMenuItem(title: "  Running indefinitely", action: nil, keyEquivalent: "")
+            let timerItem = NSMenuItem(title: "   Bottomless cup — running until stopped", action: nil, keyEquivalent: "")
             timerItem.isEnabled = false
             menu.addItem(timerItem)
         }
@@ -419,14 +421,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem.separator())
 
         // Toggle
-        let toggleTitle = caffeinateManager.isActive ? "Deactivate" : "Activate"
-        let toggleItem = NSMenuItem(title: toggleTitle, action: #selector(toggleAction), keyEquivalent: "a")
+        let toggleTitle = caffeinateManager.isActive ? "Stop Brewing" : "Start Brewing"
+        let toggleItem = NSMenuItem(title: toggleTitle, action: #selector(toggleAction), keyEquivalent: "b")
         toggleItem.target = self
         menu.addItem(toggleItem)
 
-        menu.addItem(NSMenuItem.separator())
-
-        // Duration submenu
+        // "Brew For..." duration submenu
         let durationMenu = NSMenu()
         for d in Duration.allCases {
             let item = NSMenuItem(title: d.label, action: #selector(activateWithDuration(_:)), keyEquivalent: "")
@@ -438,75 +438,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             durationMenu.addItem(item)
         }
-        let durationItem = NSMenuItem(title: "Activate For...", action: nil, keyEquivalent: "")
+        let durationItem = NSMenuItem(title: "Brew for…", action: nil, keyEquivalent: "")
         durationItem.submenu = durationMenu
         menu.addItem(durationItem)
 
-        // Default duration submenu
-        let defaultDurationMenu = NSMenu()
-        for d in Duration.allCases {
-            let item = NSMenuItem(title: d.label, action: #selector(setDefaultDuration(_:)), keyEquivalent: "")
-            item.target = self
-            item.tag = d.rawValue
-            if prefs.defaultDuration == d.rawValue {
-                item.state = .on
-            }
-            defaultDurationMenu.addItem(item)
-        }
-        let defaultDurationItem = NSMenuItem(title: "Default Duration (Left-Click)", action: nil, keyEquivalent: "")
-        defaultDurationItem.submenu = defaultDurationMenu
-        menu.addItem(defaultDurationItem)
-
         menu.addItem(NSMenuItem.separator())
 
-        // Settings section
-        let settingsLabel = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
-        settingsLabel.isEnabled = false
-        menu.addItem(settingsLabel)
-
-        // Prevent display sleep
-        let displaySleepItem = NSMenuItem(
-            title: "  Prevent Display Sleep",
-            action: #selector(toggleDisplaySleep(_:)), keyEquivalent: ""
-        )
-        displaySleepItem.target = self
-        displaySleepItem.state = prefs.preventDisplaySleep ? .on : .off
-        menu.addItem(displaySleepItem)
-
-        // Show timer in bar
-        let showTimerItem = NSMenuItem(
-            title: "  Show Timer in Menu Bar",
-            action: #selector(toggleShowTimer(_:)), keyEquivalent: ""
-        )
-        showTimerItem.target = self
-        showTimerItem.state = prefs.showTimerInBar ? .on : .off
-        menu.addItem(showTimerItem)
-
-        // Launch at login
-        let loginItem = NSMenuItem(
-            title: "  Launch at Login",
-            action: #selector(toggleLaunchAtLogin(_:)), keyEquivalent: ""
-        )
-        loginItem.target = self
-        loginItem.state = prefs.launchAtLogin ? .on : .off
-        menu.addItem(loginItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        // Auto-activate submenu
+        // Wake Triggers (moved up — often-used shortcut)
         let autoActivateMenu = NSMenu()
 
-        // Currently watched apps
         let watchedApps = prefs.watchedApps
         if !watchedApps.isEmpty {
-            let headerItem = NSMenuItem(title: "Watching:", action: nil, keyEquivalent: "")
+            let headerItem = NSMenuItem(title: "Currently brewing for:", action: nil, keyEquivalent: "")
             headerItem.isEnabled = false
             autoActivateMenu.addItem(headerItem)
 
             for bundleID in watchedApps {
                 let appName = appNameForBundleID(bundleID) ?? bundleID
                 let item = NSMenuItem(
-                    title: "  \(appName)",
+                    title: "   \(appName)",
                     action: #selector(removeWatchedApp(_:)), keyEquivalent: ""
                 )
                 item.target = self
@@ -517,8 +467,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             autoActivateMenu.addItem(NSMenuItem.separator())
         }
 
-        // Running apps to add
-        let addLabel = NSMenuItem(title: "Add Running App:", action: nil, keyEquivalent: "")
+        let addLabel = NSMenuItem(title: "Pick an app to auto-brew for:", action: nil, keyEquivalent: "")
         addLabel.isEnabled = false
         autoActivateMenu.addItem(addLabel)
 
@@ -526,7 +475,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         for appInfo in runningApps {
             if watchedApps.contains(appInfo.bundleID) { continue }
             let item = NSMenuItem(
-                title: "  \(appInfo.name)",
+                title: "   \(appInfo.name)",
                 action: #selector(addWatchedApp(_:)), keyEquivalent: ""
             )
             item.target = self
@@ -534,14 +483,63 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             autoActivateMenu.addItem(item)
         }
 
-        let autoActivateItem = NSMenuItem(title: "Auto-Activate for Apps", action: nil, keyEquivalent: "")
+        let autoActivateItem = NSMenuItem(title: "Auto-brew when an app runs…", action: nil, keyEquivalent: "")
         autoActivateItem.submenu = autoActivateMenu
         menu.addItem(autoActivateItem)
 
         menu.addItem(NSMenuItem.separator())
 
+        // Preferences section
+        let settingsLabel = NSMenuItem(title: "Preferences", action: nil, keyEquivalent: "")
+        settingsLabel.isEnabled = false
+        menu.addItem(settingsLabel)
+
+        // Default duration submenu (a preference — belongs here, not with actions)
+        let defaultDurationMenu = NSMenu()
+        for d in Duration.allCases {
+            let item = NSMenuItem(title: d.label, action: #selector(setDefaultDuration(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = d.rawValue
+            if prefs.defaultDuration == d.rawValue {
+                item.state = .on
+            }
+            defaultDurationMenu.addItem(item)
+        }
+        let defaultDurationItem = NSMenuItem(title: "   One-click shot length…", action: nil, keyEquivalent: "")
+        defaultDurationItem.submenu = defaultDurationMenu
+        menu.addItem(defaultDurationItem)
+
+        // Prevent display sleep
+        let displaySleepItem = NSMenuItem(
+            title: "   Keep the screen awake too",
+            action: #selector(toggleDisplaySleep(_:)), keyEquivalent: ""
+        )
+        displaySleepItem.target = self
+        displaySleepItem.state = prefs.preventDisplaySleep ? .on : .off
+        menu.addItem(displaySleepItem)
+
+        // Show timer in bar
+        let showTimerItem = NSMenuItem(
+            title: "   Show countdown next to the icon",
+            action: #selector(toggleShowTimer(_:)), keyEquivalent: ""
+        )
+        showTimerItem.target = self
+        showTimerItem.state = prefs.showTimerInBar ? .on : .off
+        menu.addItem(showTimerItem)
+
+        // Launch at login
+        let loginItem = NSMenuItem(
+            title: "   Open Espresso at login",
+            action: #selector(toggleLaunchAtLogin(_:)), keyEquivalent: ""
+        )
+        loginItem.target = self
+        loginItem.state = prefs.launchAtLogin ? .on : .off
+        menu.addItem(loginItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         // About
-        let aboutItem = NSMenuItem(title: "About \(Constants.appName)", action: #selector(showAbout), keyEquivalent: "")
+        let aboutItem = NSMenuItem(title: "About \(Constants.appName)…", action: #selector(showAbout), keyEquivalent: "")
         aboutItem.target = self
         menu.addItem(aboutItem)
 
@@ -553,7 +551,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateTimerMenuItem() {
         guard let item = menu.item(withTag: 999) else { return }
-        item.title = "  Time remaining: \(caffeinateManager.formattedTimeRemaining)"
+        item.title = "   Shot ends in \(caffeinateManager.formattedTimeRemaining)"
     }
 
     // MARK: - Actions
@@ -628,12 +626,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         alert.messageText = "\(Constants.appName)"
         alert.informativeText = """
-            A lightweight menu bar utility that keeps your Mac awake.
+            A tiny menu-bar barista that keeps your Mac from dozing off.
 
-            Left-click the icon to toggle.
-            Right-click for the full menu.
+            • Left-click the icon to pull a shot
+            • Right-click for the full menu
+            • Pick a preset, set a default, or brew for specific apps
 
-            Powered by macOS caffeinate.
+            Under the hood it's just /usr/bin/caffeinate with a
+            friendlier face.
             """
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
