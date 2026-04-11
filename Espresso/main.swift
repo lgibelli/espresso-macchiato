@@ -107,11 +107,17 @@ class CaffeinateManager {
         }
         task.arguments = args
 
-        task.terminationHandler = { [weak self] _ in
+        task.terminationHandler = { [weak self, weak task] _ in
             DispatchQueue.main.async {
                 guard let self = self else { return }
+                // Guard against a stale handler from a previously-terminated
+                // process stomping on the state of a freshly-started one.
+                // Without this, "activate → re-activate" flips the UI off even
+                // though the new caffeinate subprocess is still running.
+                guard self.process === task else { return }
                 self.countdownTimer?.invalidate()
                 self.countdownTimer = nil
+                self.process = nil
                 self.isActive = false
                 self.remainingSeconds = 0
                 self.totalSeconds = 0
@@ -120,7 +126,7 @@ class CaffeinateManager {
         }
 
         do {
-            try task.launch()
+            try task.run()
             process = task
             isActive = true
             totalSeconds = duration
@@ -560,7 +566,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func activateWithDuration(_ sender: NSMenuItem) {
         let duration = sender.tag
-        caffeinateManager.deactivate()
         caffeinateManager.activate(
             duration: duration,
             preventDisplaySleep: prefs.preventDisplaySleep
