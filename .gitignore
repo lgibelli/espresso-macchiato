@@ -8,6 +8,7 @@ Icon?
 ## Xcode
 build/
 build-notarize/
+build-mas/
 DerivedData/
 *.xcuserstate
 *.xcuserdatad/
