@@ -134,7 +134,7 @@ xcrun altool --validate-app \
   --type macos \
   --file "$PKG_PATH" \
   --username "$APPLE_ID" \
-  --password "@keychain:$KEYCHAIN_PROFILE" \
+  --password "@keychain:espresso-altool" \
   --team-id "$TEAM_ID"
 
 say "5/5  Upload to App Store Connect"
@@ -142,7 +142,7 @@ xcrun altool --upload-app \
   --type macos \
   --file "$PKG_PATH" \
   --username "$APPLE_ID" \
-  --password "@keychain:$KEYCHAIN_PROFILE" \
+  --password "@keychain:espresso-altool" \
   --team-id "$TEAM_ID"
 
 printf "\n\033[1;32m✅ UPLOADED\033[0m\n"
