@@ -51,6 +51,7 @@ SCHEME="Espresso"
 CONFIG="ReleaseMAS"
 APP_NAME="Espresso"
 TEAM_ID="3UFB423D7P"
+APPLE_ID="luca@gibelli.it"
 KEYCHAIN_PROFILE="espresso-notary"
 
 BUILD_DIR="$PROJECT_ROOT/build-mas"
@@ -106,6 +107,15 @@ cat > "$EXPORT_OPTIONS" <<PLIST
     <string>$TEAM_ID</string>
     <key>signingStyle</key>
     <string>manual</string>
+    <key>signingCertificate</key>
+    <string>Apple Distribution</string>
+    <key>installerSigningCertificate</key>
+    <string>3rd Party Mac Developer Installer</string>
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>com.nervoussystems.espressomacchiato</key>
+        <string>Espresso Macchiato MAS</string>
+    </dict>
 </dict>
 </plist>
 PLIST
@@ -123,20 +133,17 @@ say "4/5  Validate .pkg against App Store Connect"
 xcrun altool --validate-app \
   --type macos \
   --file "$PKG_PATH" \
-  --apple-id-profile "$KEYCHAIN_PROFILE" 2>&1 || \
-  xcrun altool --validate-app \
-    --type macos \
-    --file "$PKG_PATH" \
-    --notarytool-profile "$KEYCHAIN_PROFILE"
+  --username "$APPLE_ID" \
+  --password "@keychain:$KEYCHAIN_PROFILE" \
+  --team-id "$TEAM_ID"
 
 say "5/5  Upload to App Store Connect"
 xcrun altool --upload-app \
   --type macos \
   --file "$PKG_PATH" \
-  --notarytool-profile "$KEYCHAIN_PROFILE" || \
-  xcrun iTMSTransporter -m upload -assetFile "$PKG_PATH" \
-    -username "$(security find-generic-password -s 'com.apple.gs.appleid.password' -a "$KEYCHAIN_PROFILE" -w)" \
-    -apple_id "$(defaults read ~/.Preferences/by-host/com.apple.dt.Xcode $TEAM_ID 2>/dev/null || echo 'unknown')"
+  --username "$APPLE_ID" \
+  --password "@keychain:$KEYCHAIN_PROFILE" \
+  --team-id "$TEAM_ID"
 
 printf "\n\033[1;32m✅ UPLOADED\033[0m\n"
 echo "   Now go to https://appstoreconnect.apple.com/apps → Espresso Macchiato"

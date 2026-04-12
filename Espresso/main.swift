@@ -2,6 +2,19 @@ import Cocoa
 import IOKit.pwr_mgt
 import ServiceManagement
 
+// Sparkle auto-update, only in the Developer ID build.
+//
+//   `!MAS`                → Mac App Store build has `MAS` set as a Swift
+//                            compilation condition (see project.pbxproj
+//                            ReleaseMAS config). The App Store owns
+//                            updates there, so we skip Sparkle entirely.
+//   `canImport(Sparkle)`  → lets this file compile cleanly *before* the
+//                            Sparkle SPM package is added to the project,
+//                            so the repo isn't broken mid-integration.
+#if !MAS && canImport(Sparkle)
+import Sparkle
+#endif
+
 // MARK: - App Entry Point
 let app = NSApplication.shared
 let delegate = AppDelegate()
@@ -18,29 +31,54 @@ struct Constants {
     static let preventDisplaySleepKey = "PreventDisplaySleep"
     static let launchAtLoginKey = "LaunchAtLogin"
     static let showTimerInBarKey = "ShowTimerInBar"
-    static let defaultDurationKey = "DefaultDuration"
-}
+    static let brewDurationsKey = "BrewDurations"
 
-// MARK: - Duration Presets
-enum Duration: Int, CaseIterable {
-    case minutes5 = 300
-    case minutes15 = 900
-    case minutes30 = 1800
-    case hour1 = 3600
-    case hours2 = 7200
-    case hours5 = 18000
-    case indefinite = 0
+    /// Progression of total durations applied when the user clicks the
+    /// countdown text next to the icon. The first icon-click activates at
+    /// `clickProgression[0]` (30 min); each subsequent click on the
+    /// countdown advances to the next entry. Capped at the last entry
+    /// (24 h) — further timer clicks are a no-op. A click on the icon
+    /// itself toggles the brew off, matching the long-standing behavior.
+    static let clickProgression: [Int] = [
+        30 * 60,        // 30 min
+        60 * 60,        // 1 h
+        90 * 60,        // 1 h 30 min
+        2  * 3600,      // 2 h
+        3  * 3600,      // 3 h
+        4  * 3600,      // 4 h
+        5  * 3600,      // 5 h
+        6  * 3600,      // 6 h
+        7  * 3600,      // 7 h
+        8  * 3600,      // 8 h
+        12 * 3600,      // 12 h
+        16 * 3600,      // 16 h
+        20 * 3600,      // 20 h
+        24 * 3600,      // 24 h (cap)
+    ]
 
-    var label: String {
-        switch self {
-        case .minutes5:    return "5 min"
-        case .minutes15:   return "15 min"
-        case .minutes30:   return "30 min"
-        case .hour1:       return "1 hour"
-        case .hours2:      return "2 hours"
-        case .hours5:      return "5 hours"
-        case .indefinite:  return "Until I stop it"
-        }
+    /// Seed values for the right-click "Brew for…" submenu. The live list is
+    /// stored in UserDefaults under `brewDurationsKey`, so users can edit
+    /// the presets (e.g. `defaults write com.nervoussystems.espressomacchiato
+    /// BrewDurations -array-add <seconds>`) without a recompile. `0` means
+    /// "indefinite / until I stop it".
+    static let defaultBrewDurations: [Int] = [
+        300,      // 5 min
+        900,      // 15 min
+        1800,     // 30 min
+        3600,     // 1 hour
+        7200,     // 2 hours
+        18000,    // 5 hours
+        0,        // Until I stop it
+    ]
+
+    /// Human label for a brew-duration preset (seconds). `0` → indefinite.
+    static func brewDurationLabel(_ seconds: Int) -> String {
+        if seconds <= 0 { return "Until I stop it" }
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        if hours == 0 { return "\(minutes) min" }
+        if minutes == 0 { return hours == 1 ? "1 hour" : "\(hours) hours" }
+        return "\(hours) h \(minutes) min"
     }
 }
 
@@ -67,9 +105,18 @@ class Preferences {
         set { defaults.set(newValue, forKey: Constants.showTimerInBarKey) }
     }
 
-    var defaultDuration: Int {
-        get { defaults.integer(forKey: Constants.defaultDurationKey) }
-        set { defaults.set(newValue, forKey: Constants.defaultDurationKey) }
+    /// Configurable right-click "Brew for…" presets. Seeded from
+    /// `Constants.defaultBrewDurations` on first read; writing back to this
+    /// property persists the user's custom list in UserDefaults.
+    var brewDurations: [Int] {
+        get {
+            if let raw = defaults.array(forKey: Constants.brewDurationsKey) {
+                let ints = raw.compactMap { ($0 as? NSNumber)?.intValue }
+                if !ints.isEmpty { return ints }
+            }
+            return Constants.defaultBrewDurations
+        }
+        set { defaults.set(newValue, forKey: Constants.brewDurationsKey) }
     }
 
     var watchedApps: [String] {
@@ -189,13 +236,20 @@ class PowerAssertionManager {
     var formattedTimeRemaining: String {
         if !isActive { return "" }
         if totalSeconds == 0 { return "∞" }
-        let hours = remainingSeconds / 3600
-        let minutes = (remainingSeconds % 3600) / 60
-        let seconds = remainingSeconds % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        // Minute-granular countdown — seconds in a menu-bar timer are just
+        // noise and make the bar width jitter every tick. We ceil so the
+        // label matches the user's mental model: "29m" means "up to 29
+        // minutes left", not "29m 59s".
+        let totalMinutes = Int(ceil(Double(remainingSeconds) / 60.0))
+        let hours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+        if hours > 0 && minutes > 0 {
+            return "\(hours)h \(minutes)m"
         }
-        return String(format: "%d:%02d", minutes, seconds)
+        if hours > 0 {
+            return "\(hours)h"
+        }
+        return "\(minutes)m"
     }
 
     deinit {
@@ -281,6 +335,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let prefs = Preferences.shared
     private var autoActivatedByApp = false
 
+    /// Index into `Constants.clickProgression` that we're currently on, or
+    /// `-1` when the brew wasn't started via icon/timer clicks (e.g. the
+    /// user picked a duration from the right-click menu, or an app-watcher
+    /// auto-activated). Timer clicks use this to decide the "next" step.
+    private var clickStepIndex: Int = -1
+
+    #if !MAS && canImport(Sparkle)
+    /// Handles update checks for the Developer ID build. The MAS build
+    /// gets updates via the App Store and never instantiates this.
+    ///
+    /// `startingUpdater: true` wires Sparkle up to the standard scheduled
+    /// check cadence (once every 24 h by default) and shows the stock
+    /// Cocoa update UI when a new version is available. Feed URL and the
+    /// EdDSA public key are read from Info.plist (SUFeedURL /
+    /// SUPublicEDKey).
+    private lazy var updaterController: SPUStandardUpdaterController =
+        SPUStandardUpdaterController(
+            startingUpdater: true,
+            updaterDelegate: nil,
+            userDriverDelegate: nil
+        )
+    #endif
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide dock icon - menu bar only
         NSApp.setActivationPolicy(.accessory)
@@ -289,6 +366,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         buildMenu()
         setupCaffeinateCallbacks()
         setupAppWatcher()
+
+        #if !MAS && canImport(Sparkle)
+        // Touching the lazy var instantiates SPUStandardUpdaterController,
+        // which (with startingUpdater: true) schedules the periodic check.
+        _ = updaterController
+        #endif
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -316,14 +399,88 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if let button = statusItem.button {
                 menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 5), in: button)
             }
-        } else {
-            // Left-click: toggle with default duration
-            let duration = prefs.defaultDuration
-            powerManager.toggle(
-                duration: duration,
-                preventDisplaySleep: prefs.preventDisplaySleep
-            )
+            return
         }
+
+        // Left-click: decide whether the click landed on the icon or on the
+        // countdown text. The icon toggles (matches long-standing behavior);
+        // the countdown text steps the total duration up through
+        // `Constants.clickProgression`, capping at 24 h.
+        //
+        // When there's no countdown shown — inactive brew, or timer display
+        // disabled — every left click is treated as an icon click so the
+        // button keeps working end-to-end.
+        let showingCountdown = powerManager.isActive && prefs.showTimerInBar
+        if !showingCountdown {
+            handleIconClick()
+            return
+        }
+
+        let pointInButton = sender.convert(event.locationInWindow, from: nil)
+        let imageFrame = sender.cell?.imageRect(forBounds: sender.bounds) ?? .zero
+        // A small slop on the right edge of the image so a click on the
+        // trailing pixels of the icon still reads as an icon click.
+        let iconRightEdge = imageFrame.maxX + 2
+        if pointInButton.x <= iconRightEdge {
+            handleIconClick()
+        } else {
+            handleTimerClick()
+        }
+    }
+
+    /// Icon-click behavior: classic toggle. First click starts a fresh
+    /// 30-minute brew (the first rung of `clickProgression`); the second
+    /// click turns the anti-idle off.
+    private func handleIconClick() {
+        if powerManager.isActive {
+            clickStepIndex = -1
+            powerManager.deactivate()
+            return
+        }
+        clickStepIndex = 0
+        powerManager.activate(
+            duration: Constants.clickProgression[0],
+            preventDisplaySleep: prefs.preventDisplaySleep
+        )
+    }
+
+    /// Countdown-click behavior: advance to the next rung of
+    /// `clickProgression`. If the brew was started via the right-click menu
+    /// or an app watcher (clickStepIndex == -1), find the first rung
+    /// strictly greater than the current total and jump to it, so the
+    /// click still "adds time" from wherever we happen to be. Capped at
+    /// the last rung.
+    private func handleTimerClick() {
+        guard powerManager.isActive else { return }
+        let progression = Constants.clickProgression
+
+        let nextIndex: Int
+        if clickStepIndex >= 0 {
+            nextIndex = clickStepIndex + 1
+        } else {
+            // Unknown provenance — pick the first rung above the current total.
+            let current = powerManager.totalSeconds
+            if current <= 0 {
+                // Indefinite brew — start fresh from the first rung.
+                nextIndex = 0
+            } else if let idx = progression.firstIndex(where: { $0 > current }) {
+                nextIndex = idx
+            } else {
+                // Already at or beyond the last rung — cap.
+                return
+            }
+        }
+
+        if nextIndex >= progression.count {
+            // Already at the 24 h cap.
+            return
+        }
+
+        clickStepIndex = nextIndex
+        powerManager.activate(
+            duration: progression[nextIndex],
+            preventDisplaySleep: prefs.preventDisplaySleep
+        )
     }
 
     private func updateStatusIcon() {
@@ -372,6 +529,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         appWatcher.onWatchedAppLaunched = { [weak self] bundleID in
             guard let self = self, !self.powerManager.isActive else { return }
             self.autoActivatedByApp = true
+            self.clickStepIndex = -1
             self.powerManager.activate(
                 duration: 0,
                 preventDisplaySleep: self.prefs.preventDisplaySleep
@@ -392,6 +550,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Check if any watched app is already running at launch
         if appWatcher.isAnyWatchedAppRunning() {
             autoActivatedByApp = true
+            clickStepIndex = -1
             powerManager.activate(
                 duration: 0,
                 preventDisplaySleep: prefs.preventDisplaySleep
@@ -439,14 +598,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         toggleItem.target = self
         menu.addItem(toggleItem)
 
-        // "Brew For..." duration submenu
+        // "Brew For..." duration submenu. The list comes from
+        // `prefs.brewDurations` — configurable via UserDefaults, not
+        // hardcoded — so users can trim/extend the presets without a
+        // recompile. `0` means "Until I stop it" (indefinite).
         let durationMenu = NSMenu()
-        for d in Duration.allCases {
-            let item = NSMenuItem(title: d.label, action: #selector(activateWithDuration(_:)), keyEquivalent: "")
+        for seconds in prefs.brewDurations {
+            let item = NSMenuItem(
+                title: Constants.brewDurationLabel(seconds),
+                action: #selector(activateWithDuration(_:)),
+                keyEquivalent: ""
+            )
             item.target = self
-            item.tag = d.rawValue
-            item.representedObject = d
-            if powerManager.isActive && powerManager.totalSeconds == d.rawValue {
+            item.tag = seconds
+            if powerManager.isActive && powerManager.totalSeconds == seconds {
                 item.state = .on
             }
             durationMenu.addItem(item)
@@ -507,21 +672,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         settingsLabel.isEnabled = false
         menu.addItem(settingsLabel)
 
-        // Default duration submenu (a preference — belongs here, not with actions)
-        let defaultDurationMenu = NSMenu()
-        for d in Duration.allCases {
-            let item = NSMenuItem(title: d.label, action: #selector(setDefaultDuration(_:)), keyEquivalent: "")
-            item.target = self
-            item.tag = d.rawValue
-            if prefs.defaultDuration == d.rawValue {
-                item.state = .on
-            }
-            defaultDurationMenu.addItem(item)
-        }
-        let defaultDurationItem = NSMenuItem(title: "   One-click shot length…", action: nil, keyEquivalent: "")
-        defaultDurationItem.submenu = defaultDurationMenu
-        menu.addItem(defaultDurationItem)
-
         // Prevent display sleep
         let displaySleepItem = NSMenuItem(
             title: "   Keep the screen awake too",
@@ -551,6 +701,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
+        #if !MAS && canImport(Sparkle)
+        // Manual update check — only meaningful in the Developer ID build.
+        // The MAS build gets updates through the App Store.
+        let updateItem = NSMenuItem(
+            title: "Check for Updates…",
+            action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
+            keyEquivalent: ""
+        )
+        updateItem.target = updaterController
+        menu.addItem(updateItem)
+        #endif
+
         // About
         let aboutItem = NSMenuItem(title: "About \(Constants.appName)…", action: #selector(showAbout), keyEquivalent: "")
         aboutItem.target = self
@@ -569,23 +731,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Actions
     @objc private func toggleAction() {
+        // Menu "Start / Stop Brewing" — an explicit, duration-less toggle.
+        // The icon click covers the timed 30-min one-tap case; this menu
+        // entry is for users who just want an open-ended brew.
+        clickStepIndex = -1
         powerManager.toggle(
-            duration: prefs.defaultDuration,
+            duration: 0,
             preventDisplaySleep: prefs.preventDisplaySleep
         )
     }
 
     @objc private func activateWithDuration(_ sender: NSMenuItem) {
+        // "Brew for…" submenu picked a specific duration. This did not
+        // come from the click-progression path, so blank out the step
+        // index — if the user later clicks the countdown, we'll find the
+        // next rung above the picked duration instead of blindly advancing.
+        clickStepIndex = -1
         let duration = sender.tag
         powerManager.activate(
             duration: duration,
             preventDisplaySleep: prefs.preventDisplaySleep
         )
-    }
-
-    @objc private func setDefaultDuration(_ sender: NSMenuItem) {
-        prefs.defaultDuration = sender.tag
-        buildMenu()
     }
 
     @objc private func toggleDisplaySleep(_ sender: NSMenuItem) {
@@ -645,7 +811,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             A tiny menu-bar barista that keeps your Mac from dozing off.
 
-            • Left-click the icon to pull a shot
+            • Left-click the icon to start (30 min) or stop brewing
+            • Click the countdown to add time (up to 24 h)
             • Right-click for the full menu
 
             Under the hood it talks to macOS power management directly

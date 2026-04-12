@@ -32,5 +32,25 @@
     <string>Copyright © 2026. All rights reserved.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <!--
+        Sparkle auto-update (Developer ID build only). The MAS build is
+        gated with `#if !MAS` in main.swift and never touches these keys,
+        but they're harmless metadata in a MAS binary so we leave them
+        here rather than maintaining two Info.plist files.
+
+        Before the Developer ID build can actually deliver updates:
+          1. Generate an EdDSA key pair with Sparkle's `generate_keys`
+             tool and paste the public key into SUPublicEDKey below.
+          2. Replace SUFeedURL with the real appcast URL you'll host.
+          3. Sign each released update with `sign_update` and include
+             the signature in the appcast entry.
+        See README.md → "Publishing updates" for the full flow.
+    -->
+    <key>SUFeedURL</key>
+    <string>https://espresso.nervoussystems.com/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string></string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
 </dict>
 </plist>
