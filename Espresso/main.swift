@@ -26,7 +26,6 @@ struct Constants {
     static let appName = "Espresso"
     static let activeIcon = "cup.and.saucer.fill"
     static let inactiveIcon = "cup.and.saucer"
-    static let prefsKey = "EspressoPreferences"
     static let watchedAppsKey = "WatchedApps"
     static let preventDisplaySleepKey = "PreventDisplaySleep"
     static let launchAtLoginKey = "LaunchAtLogin"
@@ -87,6 +86,13 @@ class Preferences {
     static let shared = Preferences()
     private let defaults = UserDefaults.standard
 
+    private init() {
+        // Menu-bar countdown is on unless the user has switched it off.
+        // register(defaults:) only supplies fallback values — it never
+        // writes to disk, so a stored `false` still wins.
+        defaults.register(defaults: [Constants.showTimerInBarKey: true])
+    }
+
     var preventDisplaySleep: Bool {
         get { defaults.bool(forKey: Constants.preventDisplaySleepKey) }
         set { defaults.set(newValue, forKey: Constants.preventDisplaySleepKey) }
@@ -98,10 +104,7 @@ class Preferences {
     }
 
     var showTimerInBar: Bool {
-        get {
-            if defaults.object(forKey: Constants.showTimerInBarKey) == nil { return true }
-            return defaults.bool(forKey: Constants.showTimerInBarKey)
-        }
+        get { defaults.bool(forKey: Constants.showTimerInBarKey) }
         set { defaults.set(newValue, forKey: Constants.showTimerInBarKey) }
     }
 
@@ -181,7 +184,7 @@ class PowerAssertionManager {
                 // Partial failure: roll back any assertions we managed to
                 // create so we don't end up in a half-active state.
                 for leaked in createdIDs { IOPMAssertionRelease(leaked) }
-                print("IOPMAssertionCreateWithName failed for \(type): 0x\(String(result, radix: 16))")
+                NSLog("IOPMAssertionCreateWithName failed for %@: 0x%@", type, String(result, radix: 16))
                 return
             }
         }
@@ -341,6 +344,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// auto-activated). Timer clicks use this to decide the "next" step.
     private var clickStepIndex: Int = -1
 
+    /// Tag for the countdown menu item so the per-second tick can find and
+    /// update it without rebuilding the whole menu.
+    private static let timerItemTag = 999
+
     #if !MAS && canImport(Sparkle)
     /// Handles update checks for the Developer ID build. The MAS build
     /// gets updates via the App Store and never instantiates this.
@@ -487,12 +494,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem.button else { return }
 
         if powerManager.isActive {
-            if #available(macOS 11.0, *) {
-                button.image = NSImage(systemSymbolName: Constants.activeIcon, accessibilityDescription: "Active")
-            } else {
-                button.title = "☕️"
-            }
-
+            button.image = NSImage(systemSymbolName: Constants.activeIcon, accessibilityDescription: "Active")
             if prefs.showTimerInBar && powerManager.totalSeconds > 0 {
                 button.title = " \(powerManager.formattedTimeRemaining)"
             } else if prefs.showTimerInBar && powerManager.totalSeconds == 0 {
@@ -501,11 +503,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 button.title = ""
             }
         } else {
-            if #available(macOS 11.0, *) {
-                button.image = NSImage(systemSymbolName: Constants.inactiveIcon, accessibilityDescription: "Inactive")
-            } else {
-                button.title = "🫖"
-            }
+            button.image = NSImage(systemSymbolName: Constants.inactiveIcon, accessibilityDescription: "Inactive")
             button.title = ""
         }
     }
@@ -526,17 +524,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupAppWatcher() {
         appWatcher.updateWatchedApps(prefs.watchedApps)
 
-        appWatcher.onWatchedAppLaunched = { [weak self] bundleID in
+        appWatcher.onWatchedAppLaunched = { [weak self] _ in
             guard let self = self, !self.powerManager.isActive else { return }
-            self.autoActivatedByApp = true
-            self.clickStepIndex = -1
-            self.powerManager.activate(
-                duration: 0,
-                preventDisplaySleep: self.prefs.preventDisplaySleep
-            )
+            self.autoActivateBrew()
         }
 
-        appWatcher.onWatchedAppTerminated = { [weak self] bundleID in
+        appWatcher.onWatchedAppTerminated = { [weak self] _ in
             guard let self = self, self.autoActivatedByApp else { return }
             // Only deactivate if no other watched apps are running
             if !self.appWatcher.isAnyWatchedAppRunning() {
@@ -549,50 +542,68 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Check if any watched app is already running at launch
         if appWatcher.isAnyWatchedAppRunning() {
-            autoActivatedByApp = true
-            clickStepIndex = -1
-            powerManager.activate(
-                duration: 0,
-                preventDisplaySleep: prefs.preventDisplaySleep
-            )
+            autoActivateBrew()
         }
+    }
+
+    /// Start an indefinite brew on the app watcher's behalf — a watched app
+    /// launched, or was already running at startup.
+    private func autoActivateBrew() {
+        autoActivatedByApp = true
+        clickStepIndex = -1
+        powerManager.activate(
+            duration: 0,
+            preventDisplaySleep: prefs.preventDisplaySleep
+        )
     }
 
     // MARK: - Menu
     private func buildMenu() {
         menu = NSMenu()
+        buildStatusSection(into: menu)
+        menu.addItem(NSMenuItem.separator())
+        buildBrewSection(into: menu)
+        menu.addItem(NSMenuItem.separator())
+        buildAutoBrewSection(into: menu)
+        menu.addItem(NSMenuItem.separator())
+        buildPreferencesSection(into: menu)
+        menu.addItem(NSMenuItem.separator())
+        buildFooterSection(into: menu)
+    }
 
-        // Status header
+    /// Single source for the countdown line — used when the menu is built
+    /// and again on every timer tick update.
+    private var shotCountdownTitle: String {
+        "   Shot ends in \(powerManager.formattedTimeRemaining)"
+    }
+
+    /// Bold status header plus the countdown / bottomless-cup line.
+    private func buildStatusSection(into menu: NSMenu) {
         let statusLabel = powerManager.isActive
             ? "Espresso — Pulling a shot"
             : "Espresso — Machine is cold"
-        let statusItem = NSMenuItem(title: statusLabel, action: nil, keyEquivalent: "")
-        statusItem.isEnabled = false
-        let font = NSFont.boldSystemFont(ofSize: 13)
-        statusItem.attributedTitle = NSAttributedString(
+        let headerItem = NSMenuItem(title: statusLabel, action: nil, keyEquivalent: "")
+        headerItem.isEnabled = false
+        headerItem.attributedTitle = NSAttributedString(
             string: statusLabel,
-            attributes: [.font: font]
+            attributes: [.font: NSFont.boldSystemFont(ofSize: 13)]
         )
-        menu.addItem(statusItem)
+        menu.addItem(headerItem)
 
-        // Timer remaining (if active with duration)
         if powerManager.isActive && powerManager.totalSeconds > 0 {
-            let timerItem = NSMenuItem(
-                title: "   Shot ends in \(powerManager.formattedTimeRemaining)",
-                action: nil, keyEquivalent: ""
-            )
+            let timerItem = NSMenuItem(title: shotCountdownTitle, action: nil, keyEquivalent: "")
             timerItem.isEnabled = false
-            timerItem.tag = 999  // tag for updating
+            timerItem.tag = Self.timerItemTag
             menu.addItem(timerItem)
         } else if powerManager.isActive && powerManager.totalSeconds == 0 {
             let timerItem = NSMenuItem(title: "   Bottomless cup — running until stopped", action: nil, keyEquivalent: "")
             timerItem.isEnabled = false
             menu.addItem(timerItem)
         }
+    }
 
-        menu.addItem(NSMenuItem.separator())
-
-        // Toggle
+    /// Start/stop toggle and the "Brew for…" duration presets.
+    private func buildBrewSection(into menu: NSMenu) {
         let toggleTitle = powerManager.isActive ? "Stop Brewing" : "Start Brewing"
         let toggleItem = NSMenuItem(title: toggleTitle, action: #selector(toggleAction), keyEquivalent: "b")
         toggleItem.target = self
@@ -619,10 +630,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let durationItem = NSMenuItem(title: "Brew for…", action: nil, keyEquivalent: "")
         durationItem.submenu = durationMenu
         menu.addItem(durationItem)
+    }
 
-        menu.addItem(NSMenuItem.separator())
-
-        // Wake Triggers (moved up — often-used shortcut)
+    /// "Auto-brew when an app runs…" submenu: the watched apps (click to
+    /// remove) followed by the running apps available to add.
+    private func buildAutoBrewSection(into menu: NSMenu) {
         let autoActivateMenu = NSMenu()
 
         let watchedApps = prefs.watchedApps
@@ -632,15 +644,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             autoActivateMenu.addItem(headerItem)
 
             for bundleID in watchedApps {
-                let appName = appNameForBundleID(bundleID) ?? bundleID
-                let item = NSMenuItem(
-                    title: "   \(appName)",
-                    action: #selector(removeWatchedApp(_:)), keyEquivalent: ""
+                addAppMenuItem(
+                    to: autoActivateMenu,
+                    title: appNameForBundleID(bundleID) ?? bundleID,
+                    bundleID: bundleID,
+                    action: #selector(removeWatchedApp(_:)),
+                    checked: true
                 )
-                item.target = self
-                item.representedObject = bundleID
-                item.state = .on
-                autoActivateMenu.addItem(item)
             }
             autoActivateMenu.addItem(NSMenuItem.separator())
         }
@@ -649,25 +659,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         addLabel.isEnabled = false
         autoActivateMenu.addItem(addLabel)
 
-        let runningApps = AppWatcher.runningGUIApps()
-        for appInfo in runningApps {
-            if watchedApps.contains(appInfo.bundleID) { continue }
-            let item = NSMenuItem(
-                title: "   \(appInfo.name)",
-                action: #selector(addWatchedApp(_:)), keyEquivalent: ""
+        for appInfo in AppWatcher.runningGUIApps() where !watchedApps.contains(appInfo.bundleID) {
+            addAppMenuItem(
+                to: autoActivateMenu,
+                title: appInfo.name,
+                bundleID: appInfo.bundleID,
+                action: #selector(addWatchedApp(_:))
             )
-            item.target = self
-            item.representedObject = appInfo.bundleID
-            autoActivateMenu.addItem(item)
         }
 
         let autoActivateItem = NSMenuItem(title: "Auto-brew when an app runs…", action: nil, keyEquivalent: "")
         autoActivateItem.submenu = autoActivateMenu
         menu.addItem(autoActivateItem)
+    }
 
-        menu.addItem(NSMenuItem.separator())
+    /// One indented app entry in the auto-brew submenu.
+    private func addAppMenuItem(to menu: NSMenu, title: String, bundleID: String,
+                                action: Selector, checked: Bool = false) {
+        let item = NSMenuItem(title: "   \(title)", action: action, keyEquivalent: "")
+        item.target = self
+        item.representedObject = bundleID
+        if checked { item.state = .on }
+        menu.addItem(item)
+    }
 
-        // Preferences section
+    /// Checkbox preferences: display sleep, countdown visibility, login item.
+    private func buildPreferencesSection(into menu: NSMenu) {
         let settingsLabel = NSMenuItem(title: "Preferences", action: nil, keyEquivalent: "")
         settingsLabel.isEnabled = false
         menu.addItem(settingsLabel)
@@ -698,9 +715,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         loginItem.target = self
         loginItem.state = prefs.launchAtLogin ? .on : .off
         menu.addItem(loginItem)
+    }
 
-        menu.addItem(NSMenuItem.separator())
-
+    /// Update check (Developer ID build only), About, and Quit.
+    private func buildFooterSection(into menu: NSMenu) {
         #if !MAS && canImport(Sparkle)
         // Manual update check — only meaningful in the Developer ID build.
         // The MAS build gets updates through the App Store.
@@ -713,20 +731,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(updateItem)
         #endif
 
-        // About
         let aboutItem = NSMenuItem(title: "About \(Constants.appName)…", action: #selector(showAbout), keyEquivalent: "")
         aboutItem.target = self
         menu.addItem(aboutItem)
 
-        // Quit
         let quitItem = NSMenuItem(title: "Quit \(Constants.appName)", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
     }
 
     private func updateTimerMenuItem() {
-        guard let item = menu.item(withTag: 999) else { return }
-        item.title = "   Shot ends in \(powerManager.formattedTimeRemaining)"
+        guard let item = menu.item(withTag: Self.timerItemTag) else { return }
+        item.title = shotCountdownTitle
     }
 
     // MARK: - Actions
@@ -875,7 +891,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     try SMAppService.mainApp.unregister()
                 }
             } catch {
-                print("Failed to set launch at login: \(error)")
+                NSLog("Failed to set launch at login: %@", String(describing: error))
             }
         } else {
             // For older macOS, use a LaunchAgent plist
@@ -884,22 +900,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let plistPath = launchAgentDir
                 .appendingPathComponent("com.nervoussystems.espressomacchiato.plist")
 
-            if enabled {
-                guard let appPath = Bundle.main.bundlePath as String? else { return }
-                let plist: [String: Any] = [
-                    "Label": "com.nervoussystems.espressomacchiato",
-                    "ProgramArguments": ["\(appPath)/Contents/MacOS/Espresso"],
-                    "RunAtLoad": true,
-                ]
-                let data = try? PropertyListSerialization.data(
-                    fromPropertyList: plist, format: .xml, options: 0
-                )
-                try? FileManager.default.createDirectory(
-                    at: launchAgentDir, withIntermediateDirectories: true
-                )
-                try? data?.write(to: plistPath)
-            } else {
-                try? FileManager.default.removeItem(at: plistPath)
+            do {
+                if enabled {
+                    let plist: [String: Any] = [
+                        "Label": "com.nervoussystems.espressomacchiato",
+                        "ProgramArguments": ["\(Bundle.main.bundlePath)/Contents/MacOS/Espresso"],
+                        "RunAtLoad": true,
+                    ]
+                    let data = try PropertyListSerialization.data(
+                        fromPropertyList: plist, format: .xml, options: 0
+                    )
+                    try FileManager.default.createDirectory(
+                        at: launchAgentDir, withIntermediateDirectories: true
+                    )
+                    try data.write(to: plistPath)
+                } else if FileManager.default.fileExists(atPath: plistPath.path) {
+                    try FileManager.default.removeItem(at: plistPath)
+                }
+            } catch {
+                NSLog("Failed to update launch agent: %@", String(describing: error))
             }
         }
     }

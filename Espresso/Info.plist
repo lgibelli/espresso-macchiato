@@ -18,14 +18,25 @@
     <string>Espresso</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <!--
+        Single source of truth for the app version — the pbxproj configs
+        deliberately do NOT set MARKETING_VERSION / CURRENT_PROJECT_VERSION,
+        and notarize.sh reads the release version from here too.
+    -->
     <key>CFBundleShortVersionString</key>
     <string>1.0.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
+    <!--
+        Substituted by Xcode at build time, so each configuration stamps
+        its own floor: 12.0 for Debug/Release (Developer ID), 13.0 for
+        ReleaseMAS (the sandboxed build needs SMAppService for login
+        items). build.sh expands it with sed for the plain swiftc build.
+    -->
     <key>LSMinimumSystemVersion</key>
-    <string>12.0</string>
+    <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
