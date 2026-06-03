@@ -1,8 +1,14 @@
 #!/bin/bash
+#
+# build.sh — quick local build with plain swiftc, no Xcode required.
+# (The release pipelines in notarize.sh / submit_mas.sh use xcodebuild.)
+#
 set -e
 
-APP_NAME="Espresso"
-BUILD_DIR="build"
+source "$(dirname "$0")/build-common.sh"
+
+DEPLOYMENT_TARGET="12.0"
+BUILD_DIR="${PROJECT_ROOT}/build"
 APP_BUNDLE="${BUILD_DIR}/${APP_NAME}.app"
 CONTENTS="${APP_BUNDLE}/Contents"
 MACOS="${CONTENTS}/MacOS"
@@ -22,28 +28,30 @@ echo "  Compiling Swift..."
 swiftc \
     -O \
     -whole-module-optimization \
-    -target arm64-apple-macosx12.0 \
+    -target "arm64-apple-macosx${DEPLOYMENT_TARGET}" \
     -sdk $(xcrun --show-sdk-path) \
     -import-objc-header /dev/null \
     -o "${MACOS}/${APP_NAME}" \
-    Espresso.swift \
+    "${PROJECT_ROOT}/Espresso/main.swift" \
     2>&1
 
 # If you're on Intel Mac, also compile for x86_64 and lipo them:
-# swiftc -O -target x86_64-apple-macosx12.0 -sdk $(xcrun --show-sdk-path) \
-#     -o "${MACOS}/${APP_NAME}-x86" Espresso.swift
+# swiftc -O -target "x86_64-apple-macosx${DEPLOYMENT_TARGET}" -sdk $(xcrun --show-sdk-path) \
+#     -o "${MACOS}/${APP_NAME}-x86" "${PROJECT_ROOT}/Espresso/main.swift"
 # lipo -create "${MACOS}/${APP_NAME}" "${MACOS}/${APP_NAME}-x86" \
 #     -output "${MACOS}/${APP_NAME}-universal"
 # mv "${MACOS}/${APP_NAME}-universal" "${MACOS}/${APP_NAME}"
 # rm "${MACOS}/${APP_NAME}-x86"
 
-# Copy Info.plist
-cp Info.plist "${CONTENTS}/Info.plist"
+# Copy Info.plist, expanding the build settings Xcode would normally
+# substitute (LSMinimumSystemVersion references MACOSX_DEPLOYMENT_TARGET).
+sed "s/\$(MACOSX_DEPLOYMENT_TARGET)/${DEPLOYMENT_TARGET}/g" \
+    "${PROJECT_ROOT}/Espresso/Info.plist" > "${CONTENTS}/Info.plist"
 
 # Generate a simple app icon (coffee cup) using Python if available
 if command -v python3 &>/dev/null; then
     echo "  Generating app icon..."
-    python3 generate_icon.py "${RESOURCES}/AppIcon.icns" 2>/dev/null || true
+    python3 "${PROJECT_ROOT}/generate_icon.py" "${RESOURCES}/AppIcon.icns" 2>/dev/null || true
 fi
 
 echo ""

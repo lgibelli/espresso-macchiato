@@ -41,27 +41,30 @@
 #      Platform: macOS, Bundle ID: com.nervoussystems.espressomacchiato,
 #      SKU: any string, Primary Language: English                  ⏳ pending
 #
-#   5. notarytool keychain profile "espresso-notary" already stored from
-#      notarize.sh setup — reused here for altool/upload auth.      ✅ have
+#   5. App-specific password stored in the login keychain as the generic
+#      item "espresso-altool" — the altool calls below read it via
+#      @keychain:espresso-altool. NOTE: this is separate from the
+#      notarytool profile "espresso-notary" (altool cannot read
+#      notarytool profiles). Store it once with:
+#        xcrun altool --store-password-in-keychain-item "espresso-altool" \
+#          --username "<your apple id email>" \
+#          --password "<app-specific-password>"                     ✅ have
 #
 set -euo pipefail
 
-PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
-SCHEME="Espresso"
+source "$(dirname "$0")/build-common.sh"
+
 CONFIG="ReleaseMAS"
-APP_NAME="Espresso"
-TEAM_ID="3UFB423D7P"
-APPLE_ID="luca@gibelli.it"
-KEYCHAIN_PROFILE="espresso-notary"
+# Apple ID used for altool validate/upload; override per-machine with
+#   APPLE_ID=someone@example.com ./submit_mas.sh
+APPLE_ID="${APPLE_ID:-luca@gibelli.it}"
+ALTOOL_KEYCHAIN_ITEM="espresso-altool"
 
 BUILD_DIR="$PROJECT_ROOT/build-mas"
 ARCHIVE_PATH="$BUILD_DIR/$APP_NAME.xcarchive"
 EXPORT_PATH="$BUILD_DIR/export"
 PKG_PATH="$EXPORT_PATH/$APP_NAME.pkg"
 EXPORT_OPTIONS="$BUILD_DIR/exportOptions.plist"
-
-say() { printf "\n\033[1;34m==>\033[0m %s\n" "$*"; }
-die() { printf "\n\033[1;31mERROR:\033[0m %s\n" "$*" >&2; exit 1; }
 
 # Sanity checks — each of these is a specific prereq; fail early with guidance.
 command -v xcodebuild >/dev/null || die "xcodebuild not on PATH"
@@ -78,20 +81,17 @@ security find-identity -v -p basic 2>/dev/null | \
        Boss needs to upload NervousSystems_MacInstallerDistribution.certSigningRequest
        at https://developer.apple.com/account/resources/certificates → Mac Installer Distribution"
 
-xcrun notarytool history --keychain-profile "$KEYCHAIN_PROFILE" --output-format json >/dev/null 2>&1 || \
-  die "notarytool keychain profile '$KEYCHAIN_PROFILE' missing. See notarize.sh for setup."
+security find-generic-password -s "$ALTOOL_KEYCHAIN_ITEM" >/dev/null 2>&1 || \
+  security find-generic-password -l "$ALTOOL_KEYCHAIN_ITEM" >/dev/null 2>&1 || \
+  die "Keychain item '$ALTOOL_KEYCHAIN_ITEM' missing — altool auth will fail.
+       Store it: xcrun altool --store-password-in-keychain-item '$ALTOOL_KEYCHAIN_ITEM' \\
+                   --username '$APPLE_ID' --password '<app-specific-password>'"
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
 say "1/5  Archive ($CONFIG, sandbox on, Apple Distribution signing)"
-xcodebuild archive \
-  -project "$PROJECT_ROOT/Espresso.xcodeproj" \
-  -scheme "$SCHEME" \
-  -configuration "$CONFIG" \
-  -archivePath "$ARCHIVE_PATH" \
-  -destination "generic/platform=macOS" \
-  | grep -E "^(\*\*|error:|warning:)" || true
+do_archive "$CONFIG" "$ARCHIVE_PATH"
 
 say "2/5  Write MAS export options"
 cat > "$EXPORT_OPTIONS" <<PLIST
@@ -121,11 +121,7 @@ cat > "$EXPORT_OPTIONS" <<PLIST
 PLIST
 
 say "3/5  Export .pkg from archive (signed with Mac Installer Distribution)"
-xcodebuild -exportArchive \
-  -archivePath "$ARCHIVE_PATH" \
-  -exportPath "$EXPORT_PATH" \
-  -exportOptionsPlist "$EXPORT_OPTIONS" \
-  | grep -E "^(\*\*|error:|warning:)" || true
+do_export "$ARCHIVE_PATH" "$EXPORT_PATH" "$EXPORT_OPTIONS"
 
 [ -f "$PKG_PATH" ] || die "Exported .pkg not found at $PKG_PATH"
 
@@ -134,7 +130,7 @@ xcrun altool --validate-app \
   --type macos \
   --file "$PKG_PATH" \
   --username "$APPLE_ID" \
-  --password "@keychain:espresso-altool" \
+  --password "@keychain:$ALTOOL_KEYCHAIN_ITEM" \
   --team-id "$TEAM_ID"
 
 say "5/5  Upload to App Store Connect"
@@ -142,7 +138,7 @@ xcrun altool --upload-app \
   --type macos \
   --file "$PKG_PATH" \
   --username "$APPLE_ID" \
-  --password "@keychain:espresso-altool" \
+  --password "@keychain:$ALTOOL_KEYCHAIN_ITEM" \
   --team-id "$TEAM_ID"
 
 printf "\n\033[1;32m✅ UPLOADED\033[0m\n"
