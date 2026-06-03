@@ -32,10 +32,11 @@ struct Constants {
     static let showTimerInBarKey = "ShowTimerInBar"
     static let brewDurationsKey = "BrewDurations"
 
-    /// Progression of total durations applied when the user clicks the
-    /// countdown text next to the icon. The first icon-click activates at
-    /// `clickProgression[0]` (30 min); each subsequent click on the
-    /// countdown advances to the next entry. Capped at the last entry
+    /// Duration ladder for menu-bar clicks. The first icon-click activates
+    /// at `clickProgression[0]` (30 min); each click on the countdown text
+    /// steps up to the first rung above the time currently REMAINING — so
+    /// a 5 h brew that has run down to 1 h steps to 1 h 30 min, not 6 h —
+    /// regardless of how the brew was started. Capped at the last entry
     /// (24 h) — further timer clicks are a no-op. A click on the icon
     /// itself toggles the brew off, matching the long-standing behavior.
     static let clickProgression: [Int] = [
@@ -338,12 +339,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let prefs = Preferences.shared
     private var autoActivatedByApp = false
 
-    /// Index into `Constants.clickProgression` that we're currently on, or
-    /// `-1` when the brew wasn't started via icon/timer clicks (e.g. the
-    /// user picked a duration from the right-click menu, or an app-watcher
-    /// auto-activated). Timer clicks use this to decide the "next" step.
-    private var clickStepIndex: Int = -1
-
     /// Tag for the countdown menu item so the per-second tick can find and
     /// update it without rebuilding the whole menu.
     private static let timerItemTag = 999
@@ -440,50 +435,42 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// click turns the anti-idle off.
     private func handleIconClick() {
         if powerManager.isActive {
-            clickStepIndex = -1
             powerManager.deactivate()
             return
         }
-        clickStepIndex = 0
         powerManager.activate(
             duration: Constants.clickProgression[0],
             preventDisplaySleep: prefs.preventDisplaySleep
         )
     }
 
-    /// Countdown-click behavior: advance to the next rung of
-    /// `clickProgression`. If the brew was started via the right-click menu
-    /// or an app watcher (clickStepIndex == -1), find the first rung
-    /// strictly greater than the current total and jump to it, so the
-    /// click still "adds time" from wherever we happen to be. Capped at
-    /// the last rung.
+    /// Countdown-click behavior: step up to the first rung of
+    /// `clickProgression` strictly above the time currently REMAINING, so
+    /// the click "adds time" from wherever the countdown happens to be —
+    /// a 5 h brew that has run down to 1 h steps to 1 h 30 min, not 6 h.
+    /// We compare against the minute-ceiled value the user actually sees,
+    /// which also makes rapid clicks from a fresh 30-min brew walk the
+    /// classic 30 min → 1 h → 1 h 30 min ladder. Capped at the last rung.
     private func handleTimerClick() {
         guard powerManager.isActive else { return }
         let progression = Constants.clickProgression
 
-        let nextIndex: Int
-        if clickStepIndex >= 0 {
-            nextIndex = clickStepIndex + 1
-        } else {
-            // Unknown provenance — pick the first rung above the current total.
-            let current = powerManager.totalSeconds
-            if current <= 0 {
-                // Indefinite brew — start fresh from the first rung.
-                nextIndex = 0
-            } else if let idx = progression.firstIndex(where: { $0 > current }) {
-                nextIndex = idx
-            } else {
-                // Already at or beyond the last rung — cap.
-                return
-            }
-        }
-
-        if nextIndex >= progression.count {
-            // Already at the 24 h cap.
+        // Indefinite brew — a timer click gives it a finite duration,
+        // starting from the first rung.
+        guard powerManager.totalSeconds > 0 else {
+            powerManager.activate(
+                duration: progression[0],
+                preventDisplaySleep: prefs.preventDisplaySleep
+            )
             return
         }
 
-        clickStepIndex = nextIndex
+        let displayedSeconds = Int(ceil(Double(powerManager.remainingSeconds) / 60.0)) * 60
+        guard let nextIndex = progression.firstIndex(where: { $0 > displayedSeconds }) else {
+            // Already at or beyond the 24 h cap.
+            return
+        }
+
         powerManager.activate(
             duration: progression[nextIndex],
             preventDisplaySleep: prefs.preventDisplaySleep
@@ -550,7 +537,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// launched, or was already running at startup.
     private func autoActivateBrew() {
         autoActivatedByApp = true
-        clickStepIndex = -1
         powerManager.activate(
             duration: 0,
             preventDisplaySleep: prefs.preventDisplaySleep
@@ -750,7 +736,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Menu "Start / Stop Brewing" — an explicit, duration-less toggle.
         // The icon click covers the timed 30-min one-tap case; this menu
         // entry is for users who just want an open-ended brew.
-        clickStepIndex = -1
         powerManager.toggle(
             duration: 0,
             preventDisplaySleep: prefs.preventDisplaySleep
@@ -758,11 +743,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func activateWithDuration(_ sender: NSMenuItem) {
-        // "Brew for…" submenu picked a specific duration. This did not
-        // come from the click-progression path, so blank out the step
-        // index — if the user later clicks the countdown, we'll find the
-        // next rung above the picked duration instead of blindly advancing.
-        clickStepIndex = -1
+        // "Brew for…" submenu picked a specific duration.
         let duration = sender.tag
         powerManager.activate(
             duration: duration,
