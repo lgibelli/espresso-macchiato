@@ -11,7 +11,7 @@ A lightweight macOS menu bar app that keeps your Mac awake — a full-featured r
 - **Prevent display sleep** option (keeps screen on, not just system awake)
 - **Auto-activate for specific apps** — automatically keeps Mac awake when certain apps are running
 - **Launch at Login** support (macOS 13+ uses SMAppService, older uses LaunchAgent)
-- **Configurable default duration** for left-click toggle
+- **Configurable timer presets** for the right-click "Brew for…" menu (via `defaults write com.nervoussystems.espressomacchiato BrewDurations`)
 
 ## Requirements
 

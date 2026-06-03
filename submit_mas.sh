@@ -59,6 +59,9 @@ CONFIG="ReleaseMAS"
 #   APPLE_ID=someone@example.com ./submit_mas.sh
 APPLE_ID="${APPLE_ID:-luca@gibelli.it}"
 ALTOOL_KEYCHAIN_ITEM="espresso-altool"
+# Bundle ID comes from Info.plist (the single source of truth) so the
+# provisioning-profile mapping below can't drift from the app.
+BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PROJECT_ROOT/Espresso/Info.plist")
 
 BUILD_DIR="$PROJECT_ROOT/build-mas"
 ARCHIVE_PATH="$BUILD_DIR/$APP_NAME.xcarchive"
@@ -113,7 +116,7 @@ cat > "$EXPORT_OPTIONS" <<PLIST
     <string>3rd Party Mac Developer Installer</string>
     <key>provisioningProfiles</key>
     <dict>
-        <key>com.nervoussystems.espressomacchiato</key>
+        <key>$BUNDLE_ID</key>
         <string>Espresso Macchiato MAS</string>
     </dict>
 </dict>

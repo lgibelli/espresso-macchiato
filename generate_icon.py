@@ -89,8 +89,8 @@ def main():
             ql_output = svg_path + ".png"
             if os.path.exists(ql_output):
                 os.rename(ql_output, large_png)
-        except Exception:
-            pass
+        except (subprocess.TimeoutExpired, OSError) as e:
+            print(f"Note: qlmanage SVG render failed ({e}); falling back.")
 
         if not os.path.exists(large_png):
             # Fallback: create a simple PNG using Python + minimal drawing
