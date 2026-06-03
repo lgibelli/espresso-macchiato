@@ -1,0 +1,46 @@
+/* Espresso — 日本語 */
+
+/* 時間 */
+"Until I stop it" = "停止するまで";
+"%d min" = "%d分";
+"1 hour" = "1時間";
+"%d hours" = "%d時間";
+"%d h %d min" = "%d時間%d分";
+
+/* 電源アサーション（アクティビティモニタ / pmset に表示） */
+"Espresso is keeping your Mac awake" = "Espresso が Mac のスリープを防いでいます";
+
+/* ステータスアイコンのアクセシビリティ */
+"Active" = "動作中";
+"Inactive" = "停止中";
+
+/* メニュー: ステータス */
+"Espresso — Pulling a shot" = "Espresso — 抽出中";
+"Espresso — Machine is cold" = "Espresso — マシンは冷えています";
+"Shot ends in %@" = "抽出終了まで %@";
+"Bottomless cup — running until stopped" = "ボトムレスカップ — 停止するまで動作";
+
+/* メニュー: 抽出 */
+"Start Brewing" = "抽出を開始";
+"Stop Brewing" = "抽出を停止";
+"Brew for…" = "抽出時間…";
+
+/* メニュー: 自動抽出 */
+"Currently brewing for:" = "次のAppのために抽出中：";
+"Pick an app to auto-brew for:" = "自動抽出するAppを選択：";
+"Auto-brew when an app runs…" = "Appの実行中に自動抽出…";
+
+/* メニュー: 環境設定 */
+"Preferences" = "環境設定";
+"Keep the screen awake too" = "画面もスリープさせない";
+"Show countdown next to the icon" = "アイコンの横にカウントダウンを表示";
+"Open %@ at login" = "ログイン時に %@ を開く";
+
+/* メニュー: フッター */
+"Check for Updates…" = "アップデートを確認…";
+"About %@…" = "%@ について…";
+"Quit %@" = "%@ を終了";
+
+/* このアプリについて */
+"OK" = "OK";
+"about.body" = "\"Life is like spaghetti, it's hard until you make it\"\n(Tommy Cash)\n\nメニューバーに住む小さなバリスタが、Mac の居眠りを防ぎます。\n\n• アイコンを左クリックで抽出を開始（30分）または停止\n• カウントダウンをクリックで時間を延長（最長9時間30分）\n• 右クリックでフルメニューを表示\n\n内部では IOKit を通じて macOS の電源管理と直接やり取りします —\nサブプロセスも魔法もありません。\n\n作者: Luca Gibelli";

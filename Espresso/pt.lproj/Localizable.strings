@@ -1,0 +1,46 @@
+/* Espresso — Português */
+
+/* Durações */
+"Until I stop it" = "Até eu parar";
+"%d min" = "%d min";
+"1 hour" = "1 hora";
+"%d hours" = "%d horas";
+"%d h %d min" = "%d h %d min";
+
+/* Asserção de energia (visível no Monitor de Atividade / pmset) */
+"Espresso is keeping your Mac awake" = "O Espresso está mantendo seu Mac acordado";
+
+/* Acessibilidade do ícone de estado */
+"Active" = "Ativo";
+"Inactive" = "Inativo";
+
+/* Menu: seção de estado */
+"Espresso — Pulling a shot" = "Espresso — Extraindo um café";
+"Espresso — Machine is cold" = "Espresso — A máquina está fria";
+"Shot ends in %@" = "O café termina em %@";
+"Bottomless cup — running until stopped" = "Xícara sem fundo — ativo até ser parado";
+
+/* Menu: seção de preparo */
+"Start Brewing" = "Começar a preparar";
+"Stop Brewing" = "Parar de preparar";
+"Brew for…" = "Preparar por…";
+
+/* Menu: seção de preparo automático */
+"Currently brewing for:" = "Preparando para:";
+"Pick an app to auto-brew for:" = "Escolha um app para preparo automático:";
+"Auto-brew when an app runs…" = "Preparo automático quando um app estiver aberto…";
+
+/* Menu: seção de preferências */
+"Preferences" = "Preferências";
+"Keep the screen awake too" = "Manter a tela acesa também";
+"Show countdown next to the icon" = "Mostrar contagem regressiva ao lado do ícone";
+"Open %@ at login" = "Abrir o %@ ao iniciar sessão";
+
+/* Menu: rodapé */
+"Check for Updates…" = "Buscar atualizações…";
+"About %@…" = "Sobre o %@…";
+"Quit %@" = "Encerrar o %@";
+
+/* Diálogo Sobre */
+"OK" = "OK";
+"about.body" = "\"Life is like spaghetti, it's hard until you make it\"\n(Tommy Cash)\n\nUm pequeno barista na barra de menus que impede seu Mac de cochilar.\n\n• Clique com o botão esquerdo no ícone para começar (30 min) ou parar o preparo\n• Clique na contagem regressiva para adicionar tempo (até 9 h 30 min)\n• Clique com o botão direito para o menu completo\n\nPor baixo dos panos, o app fala diretamente com o gerenciamento\nde energia do macOS via IOKit — sem subprocessos, sem mágica.\n\nUm app de Luca Gibelli";

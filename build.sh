@@ -48,6 +48,10 @@ swiftc \
 sed "s/\$(MACOSX_DEPLOYMENT_TARGET)/${DEPLOYMENT_TARGET}/g" \
     "${PROJECT_ROOT}/Espresso/Info.plist" > "${CONTENTS}/Info.plist"
 
+# Copy localizations (Xcode compiles these into the bundle; for the plain
+# swiftc build the raw .strings files work just as well)
+cp -R "${PROJECT_ROOT}/Espresso/"*.lproj "${RESOURCES}/"
+
 # Generate a simple app icon (coffee cup) using Python if available
 if command -v python3 &>/dev/null; then
     echo "  Generating app icon..."

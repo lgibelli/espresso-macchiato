@@ -74,12 +74,20 @@ struct Constants {
 
     /// Human label for a brew-duration preset (seconds). `0` → indefinite.
     static func brewDurationLabel(_ seconds: Int) -> String {
-        if seconds <= 0 { return "Until I stop it" }
+        if seconds <= 0 {
+            return NSLocalizedString("Until I stop it", comment: "Brew duration preset: run indefinitely")
+        }
         let hours = seconds / 3600
         let minutes = (seconds % 3600) / 60
-        if hours == 0 { return "\(minutes) min" }
-        if minutes == 0 { return hours == 1 ? "1 hour" : "\(hours) hours" }
-        return "\(hours) h \(minutes) min"
+        if hours == 0 {
+            return String(format: NSLocalizedString("%d min", comment: "Duration: minutes only"), minutes)
+        }
+        if minutes == 0 {
+            return hours == 1
+                ? NSLocalizedString("1 hour", comment: "Duration: exactly one hour")
+                : String(format: NSLocalizedString("%d hours", comment: "Duration: whole hours"), hours)
+        }
+        return String(format: NSLocalizedString("%d h %d min", comment: "Duration: hours and minutes"), hours, minutes)
     }
 }
 
@@ -169,7 +177,10 @@ class PowerAssertionManager {
             types.append(kIOPMAssertionTypePreventUserIdleDisplaySleep)
         }
 
-        let reason = "Espresso is keeping your Mac awake" as CFString
+        let reason = NSLocalizedString(
+            "Espresso is keeping your Mac awake",
+            comment: "IOKit power assertion reason, visible in Activity Monitor / pmset"
+        ) as CFString
         var createdIDs: [IOPMAssertionID] = []
 
         for type in types {
@@ -482,7 +493,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem.button else { return }
 
         if powerManager.isActive {
-            button.image = NSImage(systemSymbolName: Constants.activeIcon, accessibilityDescription: "Active")
+            button.image = NSImage(
+                systemSymbolName: Constants.activeIcon,
+                accessibilityDescription: NSLocalizedString("Active", comment: "Status icon accessibility label: brewing")
+            )
             if prefs.showTimerInBar && powerManager.totalSeconds > 0 {
                 button.title = " \(powerManager.formattedTimeRemaining)"
             } else if prefs.showTimerInBar && powerManager.totalSeconds == 0 {
@@ -491,7 +505,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 button.title = ""
             }
         } else {
-            button.image = NSImage(systemSymbolName: Constants.inactiveIcon, accessibilityDescription: "Inactive")
+            button.image = NSImage(
+                systemSymbolName: Constants.inactiveIcon,
+                accessibilityDescription: NSLocalizedString("Inactive", comment: "Status icon accessibility label: idle")
+            )
             button.title = ""
         }
     }
@@ -561,14 +578,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// Single source for the countdown line — used when the menu is built
     /// and again on every timer tick update.
     private var shotCountdownTitle: String {
-        "   Shot ends in \(powerManager.formattedTimeRemaining)"
+        "   " + String(
+            format: NSLocalizedString("Shot ends in %@", comment: "Menu countdown line; %@ is H:MM remaining"),
+            powerManager.formattedTimeRemaining
+        )
     }
 
     /// Bold status header plus the countdown / bottomless-cup line.
     private func buildStatusSection(into menu: NSMenu) {
         let statusLabel = powerManager.isActive
-            ? "Espresso — Pulling a shot"
-            : "Espresso — Machine is cold"
+            ? NSLocalizedString("Espresso — Pulling a shot", comment: "Menu header while brewing")
+            : NSLocalizedString("Espresso — Machine is cold", comment: "Menu header while idle")
         let headerItem = NSMenuItem(title: statusLabel, action: nil, keyEquivalent: "")
         headerItem.isEnabled = false
         headerItem.attributedTitle = NSAttributedString(
@@ -583,7 +603,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             timerItem.tag = Self.timerItemTag
             menu.addItem(timerItem)
         } else if powerManager.isActive && powerManager.totalSeconds == 0 {
-            let timerItem = NSMenuItem(title: "   Bottomless cup — running until stopped", action: nil, keyEquivalent: "")
+            let timerItem = NSMenuItem(
+                title: "   " + NSLocalizedString("Bottomless cup — running until stopped", comment: "Menu line for an indefinite brew"),
+                action: nil, keyEquivalent: ""
+            )
             timerItem.isEnabled = false
             menu.addItem(timerItem)
         }
@@ -591,7 +614,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Start/stop toggle and the "Brew for…" duration presets.
     private func buildBrewSection(into menu: NSMenu) {
-        let toggleTitle = powerManager.isActive ? "Stop Brewing" : "Start Brewing"
+        let toggleTitle = powerManager.isActive
+            ? NSLocalizedString("Stop Brewing", comment: "Menu toggle: stop keeping the Mac awake")
+            : NSLocalizedString("Start Brewing", comment: "Menu toggle: start keeping the Mac awake")
         let toggleItem = NSMenuItem(title: toggleTitle, action: #selector(toggleAction), keyEquivalent: "b")
         toggleItem.target = self
         menu.addItem(toggleItem)
@@ -614,7 +639,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             durationMenu.addItem(item)
         }
-        let durationItem = NSMenuItem(title: "Brew for…", action: nil, keyEquivalent: "")
+        let durationItem = NSMenuItem(
+            title: NSLocalizedString("Brew for…", comment: "Submenu of duration presets"),
+            action: nil, keyEquivalent: ""
+        )
         durationItem.submenu = durationMenu
         menu.addItem(durationItem)
     }
@@ -626,7 +654,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let watchedApps = prefs.watchedApps
         if !watchedApps.isEmpty {
-            let headerItem = NSMenuItem(title: "Currently brewing for:", action: nil, keyEquivalent: "")
+            let headerItem = NSMenuItem(
+                title: NSLocalizedString("Currently brewing for:", comment: "Header above the watched apps list"),
+                action: nil, keyEquivalent: ""
+            )
             headerItem.isEnabled = false
             autoActivateMenu.addItem(headerItem)
 
@@ -642,7 +673,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             autoActivateMenu.addItem(NSMenuItem.separator())
         }
 
-        let addLabel = NSMenuItem(title: "Pick an app to auto-brew for:", action: nil, keyEquivalent: "")
+        let addLabel = NSMenuItem(
+            title: NSLocalizedString("Pick an app to auto-brew for:", comment: "Header above the running apps picker"),
+            action: nil, keyEquivalent: ""
+        )
         addLabel.isEnabled = false
         autoActivateMenu.addItem(addLabel)
 
@@ -655,7 +689,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
-        let autoActivateItem = NSMenuItem(title: "Auto-brew when an app runs…", action: nil, keyEquivalent: "")
+        let autoActivateItem = NSMenuItem(
+            title: NSLocalizedString("Auto-brew when an app runs…", comment: "Submenu: watch apps to keep the Mac awake"),
+            action: nil, keyEquivalent: ""
+        )
         autoActivateItem.submenu = autoActivateMenu
         menu.addItem(autoActivateItem)
     }
@@ -672,13 +709,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Checkbox preferences: display sleep, countdown visibility, login item.
     private func buildPreferencesSection(into menu: NSMenu) {
-        let settingsLabel = NSMenuItem(title: "Preferences", action: nil, keyEquivalent: "")
+        let settingsLabel = NSMenuItem(
+            title: NSLocalizedString("Preferences", comment: "Header of the preferences menu section"),
+            action: nil, keyEquivalent: ""
+        )
         settingsLabel.isEnabled = false
         menu.addItem(settingsLabel)
 
         // Prevent display sleep
         let displaySleepItem = NSMenuItem(
-            title: "   Keep the screen awake too",
+            title: "   " + NSLocalizedString("Keep the screen awake too", comment: "Preference: also prevent display sleep"),
             action: #selector(toggleDisplaySleep(_:)), keyEquivalent: ""
         )
         displaySleepItem.target = self
@@ -687,7 +727,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Show timer in bar
         let showTimerItem = NSMenuItem(
-            title: "   Show countdown next to the icon",
+            title: "   " + NSLocalizedString("Show countdown next to the icon", comment: "Preference: show the menu-bar countdown"),
             action: #selector(toggleShowTimer(_:)), keyEquivalent: ""
         )
         showTimerItem.target = self
@@ -696,7 +736,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Launch at login
         let loginItem = NSMenuItem(
-            title: "   Open Espresso at login",
+            title: "   " + String(
+                format: NSLocalizedString("Open %@ at login", comment: "Preference: launch at login; %@ is the app name"),
+                Constants.appName
+            ),
             action: #selector(toggleLaunchAtLogin(_:)), keyEquivalent: ""
         )
         loginItem.target = self
@@ -710,7 +753,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Manual update check — only meaningful in the Developer ID build.
         // The MAS build gets updates through the App Store.
         let updateItem = NSMenuItem(
-            title: "Check for Updates…",
+            title: NSLocalizedString("Check for Updates…", comment: "Menu item: Sparkle manual update check"),
             action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
             keyEquivalent: ""
         )
@@ -718,11 +761,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(updateItem)
         #endif
 
-        let aboutItem = NSMenuItem(title: "About \(Constants.appName)…", action: #selector(showAbout), keyEquivalent: "")
+        let aboutItem = NSMenuItem(
+            title: String(format: NSLocalizedString("About %@…", comment: "Menu item: about dialog; %@ is the app name"), Constants.appName),
+            action: #selector(showAbout), keyEquivalent: ""
+        )
         aboutItem.target = self
         menu.addItem(aboutItem)
 
-        let quitItem = NSMenuItem(title: "Quit \(Constants.appName)", action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(
+            title: String(format: NSLocalizedString("Quit %@", comment: "Menu item: quit; %@ is the app name"), Constants.appName),
+            action: #selector(quitApp), keyEquivalent: "q"
+        )
         quitItem.target = self
         menu.addItem(quitItem)
     }
@@ -818,24 +867,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showAbout() {
         let alert = NSAlert()
         alert.messageText = "\(Constants.appName)"
-        alert.informativeText = """
-            "Life is like spaghetti, it's hard until you make it"
-            (Tommy Cash)
-
-            A tiny menu-bar barista that keeps your Mac from dozing off.
-
-            • Left-click the icon to start (30 min) or stop brewing
-            • Click the countdown to add time (up to 9 h 30 min)
-            • Right-click for the full menu
-
-            Under the hood it talks to macOS power management directly
-            via IOKit — no subprocess, no magic.
-
-            App by Luca Gibelli
-            """
+        alert.informativeText = NSLocalizedString("about.body", comment: "About dialog body text")
         alert.alertStyle = .informational
         alert.icon = aboutDialogIcon()
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: NSLocalizedString("OK", comment: "About dialog dismiss button"))
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
     }

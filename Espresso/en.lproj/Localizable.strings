@@ -1,0 +1,46 @@
+/* Espresso — English (base) */
+
+/* Durations */
+"Until I stop it" = "Until I stop it";
+"%d min" = "%d min";
+"1 hour" = "1 hour";
+"%d hours" = "%d hours";
+"%d h %d min" = "%d h %d min";
+
+/* Power assertion (visible in Activity Monitor / pmset) */
+"Espresso is keeping your Mac awake" = "Espresso is keeping your Mac awake";
+
+/* Status icon accessibility */
+"Active" = "Active";
+"Inactive" = "Inactive";
+
+/* Menu: status section */
+"Espresso — Pulling a shot" = "Espresso — Pulling a shot";
+"Espresso — Machine is cold" = "Espresso — Machine is cold";
+"Shot ends in %@" = "Shot ends in %@";
+"Bottomless cup — running until stopped" = "Bottomless cup — running until stopped";
+
+/* Menu: brew section */
+"Start Brewing" = "Start Brewing";
+"Stop Brewing" = "Stop Brewing";
+"Brew for…" = "Brew for…";
+
+/* Menu: auto-brew section */
+"Currently brewing for:" = "Currently brewing for:";
+"Pick an app to auto-brew for:" = "Pick an app to auto-brew for:";
+"Auto-brew when an app runs…" = "Auto-brew when an app runs…";
+
+/* Menu: preferences section */
+"Preferences" = "Preferences";
+"Keep the screen awake too" = "Keep the screen awake too";
+"Show countdown next to the icon" = "Show countdown next to the icon";
+"Open %@ at login" = "Open %@ at login";
+
+/* Menu: footer */
+"Check for Updates…" = "Check for Updates…";
+"About %@…" = "About %@…";
+"Quit %@" = "Quit %@";
+
+/* About dialog */
+"OK" = "OK";
+"about.body" = "\"Life is like spaghetti, it's hard until you make it\"\n(Tommy Cash)\n\nA tiny menu-bar barista that keeps your Mac from dozing off.\n\n• Left-click the icon to start (30 min) or stop brewing\n• Click the countdown to add time (up to 9 h 30 min)\n• Right-click for the full menu\n\nUnder the hood it talks to macOS power management directly\nvia IOKit — no subprocess, no magic.\n\nApp by Luca Gibelli";

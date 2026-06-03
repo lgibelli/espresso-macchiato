@@ -1,0 +1,46 @@
+/* Espresso — Español */
+
+/* Duraciones */
+"Until I stop it" = "Hasta que lo detenga";
+"%d min" = "%d min";
+"1 hour" = "1 hora";
+"%d hours" = "%d horas";
+"%d h %d min" = "%d h %d min";
+
+/* Aserción de energía (visible en Monitor de Actividad / pmset) */
+"Espresso is keeping your Mac awake" = "Espresso mantiene tu Mac despierto";
+
+/* Accesibilidad del icono de estado */
+"Active" = "Activo";
+"Inactive" = "Inactivo";
+
+/* Menú: sección de estado */
+"Espresso — Pulling a shot" = "Espresso — Preparando un café";
+"Espresso — Machine is cold" = "Espresso — La máquina está fría";
+"Shot ends in %@" = "El café termina en %@";
+"Bottomless cup — running until stopped" = "Taza sin fondo — activo hasta que lo detengas";
+
+/* Menú: sección de preparación */
+"Start Brewing" = "Empezar a preparar";
+"Stop Brewing" = "Dejar de preparar";
+"Brew for…" = "Preparar durante…";
+
+/* Menú: sección de preparación automática */
+"Currently brewing for:" = "Preparando para:";
+"Pick an app to auto-brew for:" = "Elige una app para preparar automáticamente:";
+"Auto-brew when an app runs…" = "Preparación automática cuando se ejecute una app…";
+
+/* Menú: sección de preferencias */
+"Preferences" = "Preferencias";
+"Keep the screen awake too" = "Mantener también la pantalla encendida";
+"Show countdown next to the icon" = "Mostrar la cuenta atrás junto al icono";
+"Open %@ at login" = "Abrir %@ al iniciar sesión";
+
+/* Menú: pie */
+"Check for Updates…" = "Buscar actualizaciones…";
+"About %@…" = "Acerca de %@…";
+"Quit %@" = "Salir de %@";
+
+/* Diálogo Acerca de */
+"OK" = "OK";
+"about.body" = "\"Life is like spaghetti, it's hard until you make it\"\n(Tommy Cash)\n\nUn pequeño barista en la barra de menús que evita que tu Mac se duerma.\n\n• Clic izquierdo en el icono para empezar (30 min) o dejar de preparar\n• Clic en la cuenta atrás para añadir tiempo (hasta 9 h 30 min)\n• Clic derecho para el menú completo\n\nPor dentro habla directamente con la gestión de energía de macOS\nmediante IOKit — sin subprocesos, sin magia.\n\nUna app de Luca Gibelli";

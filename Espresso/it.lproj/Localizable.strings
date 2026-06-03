@@ -1,0 +1,46 @@
+/* Espresso — Italiano */
+
+/* Durate */
+"Until I stop it" = "Finché non lo fermo";
+"%d min" = "%d min";
+"1 hour" = "1 ora";
+"%d hours" = "%d ore";
+"%d h %d min" = "%d h %d min";
+
+/* Asserzione di alimentazione (visibile in Monitoraggio Attività / pmset) */
+"Espresso is keeping your Mac awake" = "Espresso tiene sveglio il tuo Mac";
+
+/* Accessibilità dell'icona di stato */
+"Active" = "Attivo";
+"Inactive" = "Inattivo";
+
+/* Menu: sezione stato */
+"Espresso — Pulling a shot" = "Espresso — Estrazione in corso";
+"Espresso — Machine is cold" = "Espresso — La macchina è fredda";
+"Shot ends in %@" = "Fine estrazione tra %@";
+"Bottomless cup — running until stopped" = "Tazza senza fondo — attivo finché non viene fermato";
+
+/* Menu: sezione preparazione */
+"Start Brewing" = "Avvia estrazione";
+"Stop Brewing" = "Ferma estrazione";
+"Brew for…" = "Prepara per…";
+
+/* Menu: sezione auto-preparazione */
+"Currently brewing for:" = "In preparazione per:";
+"Pick an app to auto-brew for:" = "Scegli un'app da tenere d'occhio:";
+"Auto-brew when an app runs…" = "Auto-preparazione quando un'app è in esecuzione…";
+
+/* Menu: sezione preferenze */
+"Preferences" = "Preferenze";
+"Keep the screen awake too" = "Tieni sveglio anche lo schermo";
+"Show countdown next to the icon" = "Mostra il conto alla rovescia accanto all'icona";
+"Open %@ at login" = "Apri %@ all'accesso";
+
+/* Menu: piè di pagina */
+"Check for Updates…" = "Controlla aggiornamenti…";
+"About %@…" = "Informazioni su %@…";
+"Quit %@" = "Esci da %@";
+
+/* Finestra Informazioni */
+"OK" = "OK";
+"about.body" = "\"Life is like spaghetti, it's hard until you make it\"\n(Tommy Cash)\n\nUn piccolo barista nella barra dei menu che impedisce al tuo Mac di appisolarsi.\n\n• Clic sinistro sull'icona per avviare (30 min) o fermare l'estrazione\n• Clic sul conto alla rovescia per aggiungere tempo (fino a 9 h 30 min)\n• Clic destro per il menu completo\n\nSotto il cofano l'app parla direttamente con la gestione energetica\ndi macOS via IOKit — niente sottoprocessi, niente magia.\n\nUn'app di Luca Gibelli";

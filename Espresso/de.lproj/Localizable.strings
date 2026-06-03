@@ -1,0 +1,46 @@
+/* Espresso — Deutsch */
+
+/* Dauern */
+"Until I stop it" = "Bis ich es stoppe";
+"%d min" = "%d Min.";
+"1 hour" = "1 Stunde";
+"%d hours" = "%d Stunden";
+"%d h %d min" = "%d Std. %d Min.";
+
+/* Power-Assertion (sichtbar in Aktivitätsanzeige / pmset) */
+"Espresso is keeping your Mac awake" = "Espresso hält Ihren Mac wach";
+
+/* Bedienungshilfen-Beschriftung des Statussymbols */
+"Active" = "Aktiv";
+"Inactive" = "Inaktiv";
+
+/* Menü: Statusbereich */
+"Espresso — Pulling a shot" = "Espresso — Es wird gebrüht";
+"Espresso — Machine is cold" = "Espresso — Die Maschine ist kalt";
+"Shot ends in %@" = "Shot endet in %@";
+"Bottomless cup — running until stopped" = "Bodenlose Tasse — läuft bis zum Stopp";
+
+/* Menü: Brühbereich */
+"Start Brewing" = "Brühen starten";
+"Stop Brewing" = "Brühen stoppen";
+"Brew for…" = "Brühen für…";
+
+/* Menü: Auto-Brühen */
+"Currently brewing for:" = "Brüht gerade für:";
+"Pick an app to auto-brew for:" = "App für Auto-Brühen auswählen:";
+"Auto-brew when an app runs…" = "Auto-Brühen, wenn eine App läuft…";
+
+/* Menü: Einstellungen */
+"Preferences" = "Einstellungen";
+"Keep the screen awake too" = "Auch den Bildschirm wach halten";
+"Show countdown next to the icon" = "Countdown neben dem Symbol anzeigen";
+"Open %@ at login" = "%@ beim Anmelden öffnen";
+
+/* Menü: Fußbereich */
+"Check for Updates…" = "Nach Updates suchen…";
+"About %@…" = "Über %@…";
+"Quit %@" = "%@ beenden";
+
+/* Über-Dialog */
+"OK" = "OK";
+"about.body" = "\"Life is like spaghetti, it's hard until you make it\"\n(Tommy Cash)\n\nEin kleiner Barista in der Menüleiste, der Ihren Mac am Eindösen hindert.\n\n• Linksklick auf das Symbol startet (30 Min.) oder stoppt das Brühen\n• Klick auf den Countdown verlängert die Zeit (bis zu 9 Std. 30 Min.)\n• Rechtsklick öffnet das vollständige Menü\n\nUnter der Haube spricht die App über IOKit direkt mit der\nEnergieverwaltung von macOS — kein Unterprozess, keine Magie.\n\nEine App von Luca Gibelli";

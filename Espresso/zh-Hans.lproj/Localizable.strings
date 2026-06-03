@@ -1,0 +1,46 @@
+/* Espresso — 简体中文 */
+
+/* 时长 */
+"Until I stop it" = "直到我手动停止";
+"%d min" = "%d 分钟";
+"1 hour" = "1 小时";
+"%d hours" = "%d 小时";
+"%d h %d min" = "%d 小时 %d 分钟";
+
+/* 电源断言（显示在活动监视器 / pmset 中） */
+"Espresso is keeping your Mac awake" = "Espresso 正在保持您的 Mac 唤醒";
+
+/* 状态图标辅助功能描述 */
+"Active" = "已启用";
+"Inactive" = "未启用";
+
+/* 菜单：状态部分 */
+"Espresso — Pulling a shot" = "Espresso — 正在萃取";
+"Espresso — Machine is cold" = "Espresso — 咖啡机已冷却";
+"Shot ends in %@" = "萃取将于 %@ 后结束";
+"Bottomless cup — running until stopped" = "无底杯 — 持续运行直到停止";
+
+/* 菜单：冲煮部分 */
+"Start Brewing" = "开始冲煮";
+"Stop Brewing" = "停止冲煮";
+"Brew for…" = "冲煮时长…";
+
+/* 菜单：自动冲煮部分 */
+"Currently brewing for:" = "正在为以下 App 冲煮：";
+"Pick an app to auto-brew for:" = "选择要自动冲煮的 App：";
+"Auto-brew when an app runs…" = "当 App 运行时自动冲煮…";
+
+/* 菜单：偏好设置部分 */
+"Preferences" = "偏好设置";
+"Keep the screen awake too" = "同时保持屏幕常亮";
+"Show countdown next to the icon" = "在图标旁显示倒计时";
+"Open %@ at login" = "登录时打开 %@";
+
+/* 菜单：底部 */
+"Check for Updates…" = "检查更新…";
+"About %@…" = "关于 %@…";
+"Quit %@" = "退出 %@";
+
+/* 关于对话框 */
+"OK" = "好";
+"about.body" = "\"Life is like spaghetti, it's hard until you make it\"\n(Tommy Cash)\n\n一位常驻菜单栏的小小咖啡师，让您的 Mac 不再打盹。\n\n• 左键点按图标开始（30 分钟）或停止冲煮\n• 点按倒计时可延长时间（最长 9 小时 30 分钟）\n• 右键点按打开完整菜单\n\n它通过 IOKit 直接与 macOS 电源管理对话——\n没有子进程，也没有魔法。\n\n作者：Luca Gibelli";

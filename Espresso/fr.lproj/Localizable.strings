@@ -1,0 +1,46 @@
+/* Espresso — Français */
+
+/* Durées */
+"Until I stop it" = "Jusqu'à ce que je l'arrête";
+"%d min" = "%d min";
+"1 hour" = "1 heure";
+"%d hours" = "%d heures";
+"%d h %d min" = "%d h %d min";
+
+/* Assertion d'alimentation (visible dans Moniteur d'activité / pmset) */
+"Espresso is keeping your Mac awake" = "Espresso maintient votre Mac éveillé";
+
+/* Accessibilité de l'icône d'état */
+"Active" = "Actif";
+"Inactive" = "Inactif";
+
+/* Menu : section état */
+"Espresso — Pulling a shot" = "Espresso — Extraction en cours";
+"Espresso — Machine is cold" = "Espresso — La machine est froide";
+"Shot ends in %@" = "Fin de l'extraction dans %@";
+"Bottomless cup — running until stopped" = "Tasse sans fond — actif jusqu'à l'arrêt";
+
+/* Menu : section préparation */
+"Start Brewing" = "Lancer l'extraction";
+"Stop Brewing" = "Arrêter l'extraction";
+"Brew for…" = "Préparer pendant…";
+
+/* Menu : section auto-préparation */
+"Currently brewing for:" = "Préparation en cours pour :";
+"Pick an app to auto-brew for:" = "Choisissez une app à surveiller :";
+"Auto-brew when an app runs…" = "Préparation auto quand une app est ouverte…";
+
+/* Menu : section préférences */
+"Preferences" = "Préférences";
+"Keep the screen awake too" = "Garder aussi l'écran allumé";
+"Show countdown next to the icon" = "Afficher le compte à rebours à côté de l'icône";
+"Open %@ at login" = "Ouvrir %@ à l'ouverture de session";
+
+/* Menu : pied */
+"Check for Updates…" = "Rechercher des mises à jour…";
+"About %@…" = "À propos de %@…";
+"Quit %@" = "Quitter %@";
+
+/* Boîte À propos */
+"OK" = "OK";
+"about.body" = "\"Life is like spaghetti, it's hard until you make it\"\n(Tommy Cash)\n\nUn petit barista dans la barre des menus qui empêche votre Mac de s'assoupir.\n\n• Clic gauche sur l'icône pour lancer (30 min) ou arrêter l'extraction\n• Cliquez sur le compte à rebours pour ajouter du temps (jusqu'à 9 h 30)\n• Clic droit pour le menu complet\n\nSous le capot, l'app dialogue directement avec la gestion d'énergie\nde macOS via IOKit — pas de sous-processus, pas de magie.\n\nUne app de Luca Gibelli";
