@@ -37,23 +37,24 @@ struct Constants {
     /// steps up to the first rung above the time currently REMAINING — so
     /// a 5 h brew that has run down to 1 h steps to 1 h 30 min, not 6 h —
     /// regardless of how the brew was started. Capped at the last entry
-    /// (24 h) — further timer clicks are a no-op. A click on the icon
-    /// itself toggles the brew off, matching the long-standing behavior.
+    /// (9 h 30 min, keeping the H:MM countdown at single-digit hours so
+    /// the menu-bar width never changes) — further timer clicks are a
+    /// no-op. A click on the icon itself toggles the brew off, matching
+    /// the long-standing behavior. Longer brews are still available via
+    /// the "Brew for…" presets or an indefinite toggle.
     static let clickProgression: [Int] = [
-        30 * 60,        // 30 min
-        60 * 60,        // 1 h
-        90 * 60,        // 1 h 30 min
-        2  * 3600,      // 2 h
-        3  * 3600,      // 3 h
-        4  * 3600,      // 4 h
-        5  * 3600,      // 5 h
-        6  * 3600,      // 6 h
-        7  * 3600,      // 7 h
-        8  * 3600,      // 8 h
-        12 * 3600,      // 12 h
-        16 * 3600,      // 16 h
-        20 * 3600,      // 20 h
-        24 * 3600,      // 24 h (cap)
+        30 * 60,        // 0:30
+        60 * 60,        // 1:00
+        90 * 60,        // 1:30
+        2  * 3600,      // 2:00
+        3  * 3600,      // 3:00
+        4  * 3600,      // 4:00
+        5  * 3600,      // 5:00
+        6  * 3600,      // 6:00
+        7  * 3600,      // 7:00
+        8  * 3600,      // 8:00
+        9  * 3600,      // 9:00
+        9  * 3600 + 30 * 60,  // 9:30 (cap)
     ]
 
     /// Seed values for the right-click "Brew for…" submenu. The live list is
@@ -240,23 +241,17 @@ class PowerAssertionManager {
         }
     }
 
+    /// Countdown formatted H:MM ("0:30", "1:00", "1:30") — constant width
+    /// for a given hour digit count, so the menu-bar icon doesn't shift
+    /// around as the duration steps up or the minutes tick by.
+    /// Minute-granular — seconds in a menu-bar timer are just noise. We
+    /// ceil so the label matches the user's mental model: "0:29" means
+    /// "up to 29 minutes left", not "29m 59s".
     var formattedTimeRemaining: String {
         if !isActive { return "" }
         if totalSeconds == 0 { return "∞" }
-        // Minute-granular countdown — seconds in a menu-bar timer are just
-        // noise and make the bar width jitter every tick. We ceil so the
-        // label matches the user's mental model: "29m" means "up to 29
-        // minutes left", not "29m 59s".
         let totalMinutes = Int(ceil(Double(remainingSeconds) / 60.0))
-        let hours = totalMinutes / 60
-        let minutes = totalMinutes % 60
-        if hours > 0 && minutes > 0 {
-            return "\(hours)h \(minutes)m"
-        }
-        if hours > 0 {
-            return "\(hours)h"
-        }
-        return "\(minutes)m"
+        return String(format: "%d:%02d", totalMinutes / 60, totalMinutes % 60)
     }
 
     deinit {
@@ -386,6 +381,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem.button {
+            // Monospaced digits so the countdown width never jitters as it
+            // ticks (proportional digits vary slightly in width).
+            button.font = NSFont.monospacedDigitSystemFont(
+                ofSize: button.font?.pointSize ?? NSFont.systemFontSize,
+                weight: .regular
+            )
             updateStatusIcon()
             button.action = #selector(statusItemClicked(_:))
             button.target = self
@@ -407,7 +408,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Left-click: decide whether the click landed on the icon or on the
         // countdown text. The icon toggles (matches long-standing behavior);
         // the countdown text steps the total duration up through
-        // `Constants.clickProgression`, capping at 24 h.
+        // `Constants.clickProgression`, capping at 9 h 30 min.
         //
         // When there's no countdown shown — inactive brew, or timer display
         // disabled — every left click is treated as an icon click so the
@@ -467,7 +468,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let displayedSeconds = Int(ceil(Double(powerManager.remainingSeconds) / 60.0)) * 60
         guard let nextIndex = progression.firstIndex(where: { $0 > displayedSeconds }) else {
-            // Already at or beyond the 24 h cap.
+            // Already at or beyond the 9:30 cap.
             return
         }
 
@@ -824,7 +825,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             A tiny menu-bar barista that keeps your Mac from dozing off.
 
             • Left-click the icon to start (30 min) or stop brewing
-            • Click the countdown to add time (up to 24 h)
+            • Click the countdown to add time (up to 9 h 30 min)
             • Right-click for the full menu
 
             Under the hood it talks to macOS power management directly
