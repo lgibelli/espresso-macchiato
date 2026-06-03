@@ -208,6 +208,9 @@ class PowerAssertionManager {
                     self.deactivate()
                 }
             }
+            // Let the system coalesce wakeups — the menu-bar countdown is
+            // minute-granular, so sub-second jitter is invisible.
+            countdownTimer?.tolerance = 0.2
         }
 
         onStateChanged?()
@@ -274,28 +277,25 @@ class AppWatcher {
     }
 
     func startWatching() {
-        let workspace = NSWorkspace.shared
-
-        observer = workspace.notificationCenter.addObserver(
-            forName: NSWorkspace.didLaunchApplicationNotification,
-            object: nil, queue: .main
-        ) { [weak self] notification in
-            guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  let bundleID = app.bundleIdentifier else { return }
-            if self?.watchedBundleIDs.contains(bundleID) == true {
-                self?.onWatchedAppLaunched?(bundleID)
-            }
+        observer = makeObserver(forName: NSWorkspace.didLaunchApplicationNotification) { [weak self] bundleID in
+            self?.onWatchedAppLaunched?(bundleID)
         }
+        terminateObserver = makeObserver(forName: NSWorkspace.didTerminateApplicationNotification) { [weak self] bundleID in
+            self?.onWatchedAppTerminated?(bundleID)
+        }
+    }
 
-        terminateObserver = workspace.notificationCenter.addObserver(
-            forName: NSWorkspace.didTerminateApplicationNotification,
-            object: nil, queue: .main
+    /// Observe a workspace app-lifecycle notification, invoking `handler`
+    /// with the bundle ID only when it belongs to a watched app.
+    private func makeObserver(forName name: Notification.Name,
+                              handler: @escaping (String) -> Void) -> NSObjectProtocol {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: name, object: nil, queue: .main
         ) { [weak self] notification in
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  let bundleID = app.bundleIdentifier else { return }
-            if self?.watchedBundleIDs.contains(bundleID) == true {
-                self?.onWatchedAppTerminated?(bundleID)
-            }
+                  let bundleID = app.bundleIdentifier,
+                  self?.watchedBundleIDs.contains(bundleID) == true else { return }
+            handler(bundleID)
         }
     }
 
@@ -805,6 +805,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             apps.append(bundleID)
             prefs.watchedApps = apps
             appWatcher.updateWatchedApps(apps)
+            // Mirror the at-launch check: if the newly watched app is
+            // already running, start the auto-brew now rather than waiting
+            // for a relaunch.
+            let appIsRunning = NSWorkspace.shared.runningApplications
+                .contains { $0.bundleIdentifier == bundleID }
+            if !powerManager.isActive && appIsRunning {
+                autoActivateBrew()
+            }
         }
         buildMenu()
     }
@@ -815,6 +823,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         apps.removeAll { $0 == bundleID }
         prefs.watchedApps = apps
         appWatcher.updateWatchedApps(apps)
+        // If this removal orphaned an auto-started brew (no watched app
+        // running anymore), stop it — the terminate observer could no
+        // longer match the app that triggered it.
+        if autoActivatedByApp && !appWatcher.isAnyWatchedAppRunning() {
+            autoActivatedByApp = false
+            powerManager.deactivate()
+        }
         buildMenu()
     }
 
@@ -849,7 +864,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let size = NSSize(width: 128, height: 128)
         let config = NSImage.SymbolConfiguration(pointSize: 96, weight: .regular)
             .applying(.init(paletteColors: [.systemBrown, .white]))
-        let symbol = NSImage(systemSymbolName: "cup.and.saucer.fill",
+        let symbol = NSImage(systemSymbolName: Constants.activeIcon,
                              accessibilityDescription: "Espresso")?
             .withSymbolConfiguration(config)
 
@@ -894,17 +909,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 NSLog("Failed to set launch at login: %@", String(describing: error))
             }
         } else {
-            // For older macOS, use a LaunchAgent plist
+            // For older macOS, use a LaunchAgent plist. Label and executable
+            // path come from the running bundle so they can't drift from
+            // Info.plist / the build settings.
+            let label = Bundle.main.bundleIdentifier ?? "com.nervoussystems.espressomacchiato"
             let launchAgentDir = FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library/LaunchAgents")
             let plistPath = launchAgentDir
-                .appendingPathComponent("com.nervoussystems.espressomacchiato.plist")
+                .appendingPathComponent("\(label).plist")
 
             do {
                 if enabled {
+                    guard let executablePath = Bundle.main.executablePath else {
+                        NSLog("Failed to install launch agent: no executable path")
+                        return
+                    }
                     let plist: [String: Any] = [
-                        "Label": "com.nervoussystems.espressomacchiato",
-                        "ProgramArguments": ["\(Bundle.main.bundlePath)/Contents/MacOS/Espresso"],
+                        "Label": label,
+                        "ProgramArguments": [executablePath],
                         "RunAtLoad": true,
                     ]
                     let data = try PropertyListSerialization.data(
