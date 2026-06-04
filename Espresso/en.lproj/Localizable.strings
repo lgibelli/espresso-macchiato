@@ -43,4 +43,5 @@
 
 /* About dialog */
 "OK" = "OK";
-"about.body" = "\"Life is like spaghetti, it's hard until you make it\"\n(Tommy Cash)\n\nA tiny menu-bar barista that keeps your Mac from dozing off.\n\n• Left-click the icon to start (30 min) or stop brewing\n• Click the countdown to add time (up to 9 h 30 min)\n• Right-click for the full menu\n\nUnder the hood it talks to macOS power management directly\nvia IOKit — no subprocess, no magic.\n\nApp by Luca Gibelli";
+"about.body" = "\"Life is like spaghetti, it's hard until you make it\"\n(Tommy Cash)\n\nA tiny menu-bar barista that keeps your Mac from dozing off.\n\n• Left-click the icon to start (30 min) or stop brewing\n• Click the countdown to add time (up to 9 h 30 min)\n• Right-click for the full menu\n\nUnder the hood it talks to macOS power management directly\nvia IOKit — no subprocess, no magic.";
+"Discover our other projects:" = "Discover our other projects:";

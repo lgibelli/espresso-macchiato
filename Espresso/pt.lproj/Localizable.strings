@@ -43,4 +43,5 @@
 
 /* Diálogo Sobre */
 "OK" = "OK";
-"about.body" = "\"Life is like spaghetti, it's hard until you make it\"\n(Tommy Cash)\n\nUm pequeno barista na barra de menus que impede seu Mac de cochilar.\n\n• Clique com o botão esquerdo no ícone para começar (30 min) ou parar o preparo\n• Clique na contagem regressiva para adicionar tempo (até 9 h 30 min)\n• Clique com o botão direito para o menu completo\n\nPor baixo dos panos, o app fala diretamente com o gerenciamento\nde energia do macOS via IOKit — sem subprocessos, sem mágica.\n\nUm app de Luca Gibelli";
+"about.body" = "\"Life is like spaghetti, it's hard until you make it\"\n(Tommy Cash)\n\nUm pequeno barista na barra de menus que impede seu Mac de cochilar.\n\n• Clique com o botão esquerdo no ícone para começar (30 min) ou parar o preparo\n• Clique na contagem regressiva para adicionar tempo (até 9 h 30 min)\n• Clique com o botão direito para o menu completo\n\nPor baixo dos panos, o app fala diretamente com o gerenciamento\nde energia do macOS via IOKit — sem subprocessos, sem mágica.";
+"Discover our other projects:" = "Conheça nossos outros projetos:";

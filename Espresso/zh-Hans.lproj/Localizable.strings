@@ -43,4 +43,5 @@
 
 /* 关于对话框 */
 "OK" = "好";
-"about.body" = "\"Life is like spaghetti, it's hard until you make it\"\n(Tommy Cash)\n\n一位常驻菜单栏的小小咖啡师，让您的 Mac 不再打盹。\n\n• 左键点按图标开始（30 分钟）或停止冲煮\n• 点按倒计时可延长时间（最长 9 小时 30 分钟）\n• 右键点按打开完整菜单\n\n它通过 IOKit 直接与 macOS 电源管理对话——\n没有子进程，也没有魔法。\n\n作者：Luca Gibelli";
+"about.body" = "\"Life is like spaghetti, it's hard until you make it\"\n(Tommy Cash)\n\n一位常驻菜单栏的小小咖啡师，让您的 Mac 不再打盹。\n\n• 左键点按图标开始（30 分钟）或停止冲煮\n• 点按倒计时可延长时间（最长 9 小时 30 分钟）\n• 右键点按打开完整菜单\n\n它通过 IOKit 直接与 macOS 电源管理对话——\n没有子进程，也没有魔法。";
+"Discover our other projects:" = "了解我们的其他项目：";

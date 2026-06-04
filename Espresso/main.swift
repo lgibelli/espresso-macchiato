@@ -870,9 +870,53 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         alert.informativeText = NSLocalizedString("about.body", comment: "About dialog body text")
         alert.alertStyle = .informational
         alert.icon = aboutDialogIcon()
+        alert.accessoryView = aboutLinkView()
         alert.addButton(withTitle: NSLocalizedString("OK", comment: "About dialog dismiss button"))
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
+    }
+
+    /// "Discover our other projects" line with a clickable link. NSAlert's
+    /// informativeText is plain text, so the link lives in an accessory
+    /// view — a selectable label, which is what makes the .link attribute
+    /// clickable.
+    private func aboutLinkView() -> NSView {
+        let prefix = NSLocalizedString("Discover our other projects:", comment: "About dialog: lead-in for the website link")
+        let linkText = "www.salamacchine.it"
+        let text = NSMutableAttributedString(
+            string: "\(prefix) \(linkText)",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+                .foregroundColor: NSColor.labelColor,
+            ]
+        )
+        if let url = URL(string: "https://www.salamacchine.it") {
+            let range = (text.string as NSString).range(of: linkText)
+            text.addAttributes([
+                .link: url,
+                .foregroundColor: NSColor.linkColor,
+                .underlineStyle: NSUnderlineStyle.single.rawValue,
+            ], range: range)
+        }
+
+        let label = NSTextField(labelWithString: "")
+        label.allowsEditingTextAttributes = true  // required for the .link to be clickable
+        label.isSelectable = true
+        label.alignment = .center
+        label.attributedStringValue = text
+        label.sizeToFit()
+
+        // Wrap in a slightly taller container so the line gets breathing
+        // room between the body text and the OK button.
+        let padding: CGFloat = 6
+        let container = NSView(frame: NSRect(
+            x: 0, y: 0,
+            width: label.frame.width,
+            height: label.frame.height + padding * 2
+        ))
+        label.frame.origin = NSPoint(x: 0, y: padding)
+        container.addSubview(label)
+        return container
     }
 
     /// Build a nice big coffee-cup glyph for the About dialog so it doesn't

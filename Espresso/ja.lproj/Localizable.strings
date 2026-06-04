@@ -43,4 +43,5 @@
 
 /* このアプリについて */
 "OK" = "OK";
-"about.body" = "\"Life is like spaghetti, it's hard until you make it\"\n(Tommy Cash)\n\nメニューバーに住む小さなバリスタが、Mac の居眠りを防ぎます。\n\n• アイコンを左クリックで抽出を開始（30分）または停止\n• カウントダウンをクリックで時間を延長（最長9時間30分）\n• 右クリックでフルメニューを表示\n\n内部では IOKit を通じて macOS の電源管理と直接やり取りします —\nサブプロセスも魔法もありません。\n\n作者: Luca Gibelli";
+"about.body" = "\"Life is like spaghetti, it's hard until you make it\"\n(Tommy Cash)\n\nメニューバーに住む小さなバリスタが、Mac の居眠りを防ぎます。\n\n• アイコンを左クリックで抽出を開始（30分）または停止\n• カウントダウンをクリックで時間を延長（最長9時間30分）\n• 右クリックでフルメニューを表示\n\n内部では IOKit を通じて macOS の電源管理と直接やり取りします —\nサブプロセスも魔法もありません。";
+"Discover our other projects:" = "その他のプロジェクトはこちら：";
