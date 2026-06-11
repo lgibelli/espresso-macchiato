@@ -11,7 +11,7 @@
     <key>CFBundleIconName</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>com.nervoussystems.espressomacchiato</string>
+    <string>it.salamacchine.espressomacchiato</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>

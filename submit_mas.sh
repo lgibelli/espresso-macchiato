@@ -19,14 +19,14 @@
 #   Ships as       Notarized .zip on      Mac App Store listing
 #                  GitHub release
 #
-# Prereqs (one-time, ALL currently pending boss/ASC setup):
+# Prereqs (one-time, ALL currently pending StarData ASC setup):
 #
 #   1. All three certs installed in login keychain:
-#        - Developer ID Application: Andrea Grandi (3UFB423D7P)   ✅ have
-#        - Apple Distribution: Andrea Grandi (3UFB423D7P)         ✅ have
-#        - Mac Installer Distribution: Andrea Grandi (3UFB423D7P) ⏳ pending
+#        - Developer ID Application: Stardata s.r.l. (T4552AW4A5)   ⏳ create under StarData
+#        - Apple Distribution: Stardata s.r.l. (T4552AW4A5)         ⏳ create under StarData
+#        - Mac Installer Distribution: Stardata s.r.l. (T4552AW4A5) ⏳ pending
 #
-#   2. Bundle ID "com.nervoussystems.espressomacchiato" registered in
+#   2. Bundle ID "it.salamacchine.espressomacchiato" registered in
 #      https://developer.apple.com/account/resources/identifiers
 #      (Admin/App Manager role required)                          ⏳ pending
 #
@@ -38,7 +38,7 @@
 #
 #   4. App record created in App Store Connect:
 #      https://appstoreconnect.apple.com/apps → + → New App
-#      Platform: macOS, Bundle ID: com.nervoussystems.espressomacchiato,
+#      Platform: macOS, Bundle ID: it.salamacchine.espressomacchiato,
 #      SKU: any string, Primary Language: English                  ⏳ pending
 #
 #   5. App-specific password stored in the login keychain as the generic
@@ -48,7 +48,7 @@
 #      notarytool profiles). Store it once with:
 #        xcrun altool --store-password-in-keychain-item "espresso-altool" \
 #          --username "<your apple id email>" \
-#          --password "<app-specific-password>"                     ✅ have
+#          --password "<app-specific-password>"                     ⏳ create under StarData
 #
 set -euo pipefail
 
@@ -57,7 +57,7 @@ source "$(dirname "$0")/build-common.sh"
 CONFIG="ReleaseMAS"
 # Apple ID used for altool validate/upload; override per-machine with
 #   APPLE_ID=someone@example.com ./submit_mas.sh
-APPLE_ID="${APPLE_ID:-luca@gibelli.it}"
+APPLE_ID="${APPLE_ID:-server@stardata.it}"
 ALTOOL_KEYCHAIN_ITEM="espresso-altool"
 # Bundle ID comes from Info.plist (the single source of truth) so the
 # provisioning-profile mapping below can't drift from the app.
@@ -75,13 +75,13 @@ command -v xcodebuild >/dev/null || die "xcodebuild not on PATH"
 security find-identity -v -p basic 2>/dev/null | \
   grep -q "Apple Distribution: .*($TEAM_ID)" || \
   die "Missing 'Apple Distribution' identity for team $TEAM_ID.
-       Boss needs to upload NervousSystems_AppleDistribution.certSigningRequest
+       Upload Stardata_AppleDistribution.certSigningRequest
        at https://developer.apple.com/account/resources/certificates"
 
 security find-identity -v -p basic 2>/dev/null | \
   grep -q "3rd Party Mac Developer Installer\|Mac Installer Distribution" || \
   die "Missing 'Mac Installer Distribution' identity for team $TEAM_ID.
-       Boss needs to upload NervousSystems_MacInstallerDistribution.certSigningRequest
+       Upload Stardata_MacInstallerDistribution.certSigningRequest
        at https://developer.apple.com/account/resources/certificates → Mac Installer Distribution"
 
 security find-generic-password -s "$ALTOOL_KEYCHAIN_ITEM" >/dev/null 2>&1 || \

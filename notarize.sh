@@ -8,8 +8,8 @@
 #   2. Apple WWDR G3 intermediate installed (for Apple Distribution chain).
 #   3. Credentials stored via:
 #        xcrun notarytool store-credentials "espresso-notary" \
-#          --apple-id "<your apple id email>" \
-#          --team-id  "3UFB423D7P" \
+#          --apple-id "server@stardata.it" \
+#          --team-id  "T4552AW4A5" \
 #          --password "<app-specific-password>"
 #
 # Usage:
@@ -44,7 +44,7 @@ security find-identity -v -p basic 2>/dev/null | \
 xcrun notarytool history --keychain-profile "$KEYCHAIN_PROFILE" --output-format json >/dev/null 2>&1 || \
   die "notarytool keychain profile '$KEYCHAIN_PROFILE' missing or invalid.
        Run: xcrun notarytool store-credentials '$KEYCHAIN_PROFILE' \\
-              --apple-id '<your apple id>' --team-id '$TEAM_ID' --password '<app-specific-password>'"
+              --apple-id 'server@stardata.it' --team-id '$TEAM_ID' --password '<app-specific-password>'"
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"

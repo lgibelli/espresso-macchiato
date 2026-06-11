@@ -11,7 +11,7 @@ A lightweight macOS menu bar app that keeps your Mac awake — a full-featured r
 - **Prevent display sleep** option (keeps screen on, not just system awake)
 - **Auto-activate for specific apps** — automatically keeps Mac awake when certain apps are running
 - **Launch at Login** support (macOS 13+ uses SMAppService, older uses LaunchAgent)
-- **Configurable timer presets** for the right-click "Brew for…" menu (via `defaults write com.nervoussystems.espressomacchiato BrewDurations`)
+- **Configurable timer presets** for the right-click "Brew for…" menu (via `defaults write it.salamacchine.espressomacchiato BrewDurations`)
 - **Localized** in English, French, German, Italian, Spanish, Portuguese, Japanese, and Simplified Chinese
 
 ## Requirements
@@ -80,4 +80,4 @@ from the App Store. To switch updates on:
 
 1. Quit Espresso from the menu bar
 2. Delete `Espresso.app` from Applications
-3. If you enabled Launch at Login on older macOS, remove: `~/Library/LaunchAgents/com.nervoussystems.espressomacchiato.plist`
+3. If you enabled Launch at Login on older macOS, remove: `~/Library/LaunchAgents/it.salamacchine.espressomacchiato.plist`

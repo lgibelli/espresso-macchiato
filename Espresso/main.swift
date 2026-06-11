@@ -59,7 +59,7 @@ struct Constants {
 
     /// Seed values for the right-click "Brew for…" submenu. The live list is
     /// stored in UserDefaults under `brewDurationsKey`, so users can edit
-    /// the presets (e.g. `defaults write com.nervoussystems.espressomacchiato
+    /// the presets (e.g. `defaults write it.salamacchine.espressomacchiato
     /// BrewDurations -array-add <seconds>`) without a recompile. `0` means
     /// "indefinite / until I stop it".
     static let defaultBrewDurations: [Int] = [
@@ -973,7 +973,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // For older macOS, use a LaunchAgent plist. Label and executable
             // path come from the running bundle so they can't drift from
             // Info.plist / the build settings.
-            let label = Bundle.main.bundleIdentifier ?? "com.nervoussystems.espressomacchiato"
+            let label = Bundle.main.bundleIdentifier ?? "it.salamacchine.espressomacchiato"
             let launchAgentDir = FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library/LaunchAgents")
             let plistPath = launchAgentDir

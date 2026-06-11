@@ -9,7 +9,7 @@
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCHEME="Espresso"
 APP_NAME="Espresso"
-TEAM_ID="3UFB423D7P"
+TEAM_ID="T4552AW4A5"
 
 say() { printf "\n\033[1;34m==>\033[0m %s\n" "$*"; }
 die() { printf "\n\033[1;31mERROR:\033[0m %s\n" "$*" >&2; exit 1; }
