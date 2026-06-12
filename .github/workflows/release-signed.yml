@@ -1,0 +1,89 @@
+name: Signed release (DMG)
+
+# Publishes the SIGNED + NOTARIZED Espresso Macchiato .dmg for direct download.
+# Triggers on a push to a release/** branch (only maintainers can create those —
+# a fork PR cannot, so the signing secrets stay safe) or manually. This job has
+# access to the signing secrets; never make it reachable from pull_request /
+# pull_request_target. Release flow:
+#   1. Bump CFBundleShortVersionString in Espresso/Info.plist.
+#   2. Push a release/<version> branch (e.g. release/1.0.1) — or run manually.
+# CI imports the real "Developer ID Application" cert + the notary API key, runs
+# release-dmg.sh (archive → Developer-ID sign → notarize+staple the app and the
+# DMG), and publishes the .dmg here. The Mac App Store path (submit_mas.sh) stays
+# a deliberate manual step.
+on:
+  push:
+    branches: ["release/**"]
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: "Release notes"
+        required: true
+        default: "Espresso Macchiato release"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14            # arm64; the app targets macOS 12+
+    environment: release         # optional: add required reviewers in Settings → Environments
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import macOS signing identity into a throwaway keychain
+        env:
+          CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          KCPW="$(openssl rand -base64 24)"
+          echo "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KCPW" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KCPW" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/xcodebuild
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCPW" "$KEYCHAIN"
+          # Put our keychain first so codesign/xcodebuild resolve the Developer ID
+          # identity; keep the login keychain in the list too.
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed s/\"//g)
+          rm "$RUNNER_TEMP/cert.p12"
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+      - name: Write notary (App Store Connect) API key
+        env:
+          APPLE_API_KEY_B64: ${{ secrets.APPLE_API_KEY_B64 }}
+        run: printf '%s' "$APPLE_API_KEY_B64" | base64 --decode > "$RUNNER_TEMP/notary-key.p8"
+
+      - name: Build, sign, notarize & package the DMG
+        env:
+          TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          MACOS_SIGNING_IDENTITY: ${{ vars.MACOS_SIGNING_IDENTITY }}
+          APPLE_API_KEY_PATH: ${{ runner.temp }}/notary-key.p8
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: ./release-dmg.sh
+
+      - name: Publish the DMG
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          # Pass notes via env (never interpolate ${{ }} into a run: shell — a
+          # crafted value could inject commands into this secret-bearing job).
+          NOTES: ${{ inputs.notes || format('Espresso Macchiato release ({0})', github.ref_name) }}
+        run: |
+          set -euo pipefail
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Espresso/Info.plist)
+          TAG="v$VERSION"
+          DMG="build-notarize/Espresso-$VERSION.dmg"
+          [ -f "$DMG" ] || { echo "::error::DMG not found at $DMG"; exit 1; }
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" --repo "$REPO" --clobber "$DMG"
+            gh release edit "$TAG" --repo "$REPO" --prerelease=false
+          else
+            gh release create "$TAG" --repo "$REPO" \
+              --title "Espresso Macchiato $VERSION" --notes "$NOTES" \
+              --target "$GITHUB_SHA" "$DMG"
+          fi
+          echo ">> published: https://github.com/$REPO/releases/tag/$TAG"
