@@ -8,9 +8,11 @@
 #   2. Apple WWDR G3 intermediate installed (for Apple Distribution chain).
 #   3. Credentials stored via:
 #        xcrun notarytool store-credentials "espresso-notary" \
-#          --apple-id "server@stardata.it" \
-#          --team-id  "T4552AW4A5" \
+#          --apple-id "you@example.com" \
+#          --team-id  "$TEAM_ID" \
 #          --password "<app-specific-password>"
+#
+#   4. TEAM_ID set in your environment or release.env (see release.env.example).
 #
 # Usage:
 #   ./notarize.sh
@@ -21,6 +23,7 @@
 set -euo pipefail
 
 source "$(dirname "$0")/build-common.sh"
+require_team_id
 
 CONFIG="Release"
 KEYCHAIN_PROFILE="espresso-notary"
@@ -44,7 +47,7 @@ security find-identity -v -p basic 2>/dev/null | \
 xcrun notarytool history --keychain-profile "$KEYCHAIN_PROFILE" --output-format json >/dev/null 2>&1 || \
   die "notarytool keychain profile '$KEYCHAIN_PROFILE' missing or invalid.
        Run: xcrun notarytool store-credentials '$KEYCHAIN_PROFILE' \\
-              --apple-id 'server@stardata.it' --team-id '$TEAM_ID' --password '<app-specific-password>'"
+              --apple-id 'you@example.com' --team-id '$TEAM_ID' --password '<app-specific-password>'"
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"

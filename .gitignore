@@ -38,3 +38,6 @@ Carthage/Build/
 
 ## Claude Code
 .claude/
+
+## Local signing config (Apple Team ID / Apple ID) — never commit
+release.env

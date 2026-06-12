@@ -19,12 +19,12 @@
 #   Ships as       Notarized .zip on      Mac App Store listing
 #                  GitHub release
 #
-# Prereqs (one-time, ALL currently pending StarData ASC setup):
+# Prereqs (one-time):
 #
-#   1. All three certs installed in login keychain:
-#        - Developer ID Application: Stardata s.r.l. (T4552AW4A5)   ⏳ create under StarData
-#        - Apple Distribution: Stardata s.r.l. (T4552AW4A5)         ⏳ create under StarData
-#        - Mac Installer Distribution: Stardata s.r.l. (T4552AW4A5) ⏳ pending
+#   1. All three certs installed in login keychain (issued to your team):
+#        - Developer ID Application: <Your Company> (<TEAM_ID>)
+#        - Apple Distribution: <Your Company> (<TEAM_ID>)
+#        - Mac Installer Distribution: <Your Company> (<TEAM_ID>)
 #
 #   2. Bundle ID "it.salamacchine.espressomacchiato" registered in
 #      https://developer.apple.com/account/resources/identifiers
@@ -48,16 +48,18 @@
 #      notarytool profiles). Store it once with:
 #        xcrun altool --store-password-in-keychain-item "espresso-altool" \
 #          --username "<your apple id email>" \
-#          --password "<app-specific-password>"                     ⏳ create under StarData
+#          --password "<app-specific-password>"
 #
 set -euo pipefail
 
 source "$(dirname "$0")/build-common.sh"
+require_team_id
+require_apple_id
 
 CONFIG="ReleaseMAS"
-# Apple ID used for altool validate/upload; override per-machine with
+# Apple ID used for altool validate/upload. Set it in your environment or
+# release.env (see release.env.example), or override per-machine with
 #   APPLE_ID=someone@example.com ./submit_mas.sh
-APPLE_ID="${APPLE_ID:-server@stardata.it}"
 ALTOOL_KEYCHAIN_ITEM="espresso-altool"
 # Bundle ID comes from Info.plist (the single source of truth) so the
 # provisioning-profile mapping below can't drift from the app.
@@ -75,13 +77,13 @@ command -v xcodebuild >/dev/null || die "xcodebuild not on PATH"
 security find-identity -v -p basic 2>/dev/null | \
   grep -q "Apple Distribution: .*($TEAM_ID)" || \
   die "Missing 'Apple Distribution' identity for team $TEAM_ID.
-       Upload Stardata_AppleDistribution.certSigningRequest
+       Create an 'Apple Distribution' certificate
        at https://developer.apple.com/account/resources/certificates"
 
 security find-identity -v -p basic 2>/dev/null | \
   grep -q "3rd Party Mac Developer Installer\|Mac Installer Distribution" || \
   die "Missing 'Mac Installer Distribution' identity for team $TEAM_ID.
-       Upload Stardata_MacInstallerDistribution.certSigningRequest
+       Create a 'Mac Installer Distribution' certificate
        at https://developer.apple.com/account/resources/certificates → Mac Installer Distribution"
 
 security find-generic-password -s "$ALTOOL_KEYCHAIN_ITEM" >/dev/null 2>&1 || \
