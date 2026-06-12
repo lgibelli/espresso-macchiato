@@ -63,35 +63,18 @@ say "1/6  Archive ($CONFIG)"
 do_archive "$CONFIG" "$ARCHIVE_PATH"
 [ -d "$ARCHIVE_PATH" ] || die "archive not produced at $ARCHIVE_PATH"
 
-say "2/6  Export Developer-ID-signed .app"
-cat > "$EXPORT_OPTIONS" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>method</key>
-    <string>developer-id</string>
-    <key>teamID</key>
-    <string>$TEAM_ID</string>
-    <key>signingStyle</key>
-    <string>manual</string>
-    <key>signingCertificate</key>
-    <string>Developer ID Application</string>
-</dict>
-</plist>
-PLIST
-# Export directly (not via do_export) so a failure surfaces the real xcodebuild
-# error + the Xcode distribution log, instead of being swallowed by a grep filter.
-xcodebuild -exportArchive \
-  -archivePath "$ARCHIVE_PATH" \
-  -exportPath "$EXPORT_PATH" \
-  -exportOptionsPlist "$EXPORT_OPTIONS" || {
-    echo "--- xcodebuild -exportArchive failed; Xcode distribution log: ---" >&2
-    find "${TMPDIR:-/var/folders}" /tmp -name 'IDEDistribution.standardlog' 2>/dev/null \
-      | xargs -I{} sh -c 'echo ">> {}"; tail -60 "{}"' >&2 || true
-    die "xcodebuild -exportArchive failed (see log above)"
-  }
-[ -d "$APP_PATH" ] || die "Exported .app not found at $APP_PATH"
+# xcodebuild -exportArchive segfaults on the CI runners (an Xcode/IDEDistribution
+# bug), so skip it: the archive already contains the Release-config (Developer
+# ID, manual) signed .app. Copy it out and re-sign with the hardened runtime +
+# a secure timestamp (both required for notarization).
+say "2/6  Extract .app from archive + Developer-ID re-sign (hardened runtime)"
+ARCHIVED_APP="$ARCHIVE_PATH/Products/Applications/$APP_NAME.app"
+[ -d "$ARCHIVED_APP" ] || die "app not found in archive at $ARCHIVED_APP"
+mkdir -p "$EXPORT_PATH"
+rm -rf "$APP_PATH"
+cp -R "$ARCHIVED_APP" "$EXPORT_PATH/"
+codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$APP_PATH"
+codesign --verify --strict --verbose=2 "$APP_PATH"
 
 say "3/6  Notarize + staple the .app"
 ZIP_TMP="$BUILD_DIR/$APP_NAME-app.zip"
