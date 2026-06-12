@@ -80,7 +80,17 @@ cat > "$EXPORT_OPTIONS" <<PLIST
 </dict>
 </plist>
 PLIST
-do_export "$ARCHIVE_PATH" "$EXPORT_PATH" "$EXPORT_OPTIONS"
+# Export directly (not via do_export) so a failure surfaces the real xcodebuild
+# error + the Xcode distribution log, instead of being swallowed by a grep filter.
+xcodebuild -exportArchive \
+  -archivePath "$ARCHIVE_PATH" \
+  -exportPath "$EXPORT_PATH" \
+  -exportOptionsPlist "$EXPORT_OPTIONS" || {
+    echo "--- xcodebuild -exportArchive failed; Xcode distribution log: ---" >&2
+    find "${TMPDIR:-/var/folders}" /tmp -name 'IDEDistribution.standardlog' 2>/dev/null \
+      | xargs -I{} sh -c 'echo ">> {}"; tail -60 "{}"' >&2 || true
+    die "xcodebuild -exportArchive failed (see log above)"
+  }
 [ -d "$APP_PATH" ] || die "Exported .app not found at $APP_PATH"
 
 say "3/6  Notarize + staple the .app"
