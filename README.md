@@ -81,3 +81,8 @@ from the App Store. To switch updates on:
 1. Quit Espresso from the menu bar
 2. Delete `Espresso.app` from Applications
 3. If you enabled Launch at Login on older macOS, remove: `~/Library/LaunchAgents/it.salamacchine.espressomacchiato.plist`
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE). See the `LICENSE`
+file for the full text.
