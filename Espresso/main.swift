@@ -114,7 +114,14 @@ class Preferences {
         // Menu-bar countdown is on unless the user has switched it off.
         // register(defaults:) only supplies fallback values — it never
         // writes to disk, so a stored `false` still wins.
-        defaults.register(defaults: [Constants.showTimerInBarKey: true])
+        defaults.register(defaults: [
+            Constants.showTimerInBarKey: true,
+            // Espresso's whole point is keeping the Mac awake — default to keeping
+            // the SCREEN on too, so "keep the monitor on" works out of the box. A
+            // user who explicitly turns it off still wins (register only supplies
+            // the fallback for an unset value; a stored `false` is preserved).
+            Constants.preventDisplaySleepKey: true,
+        ])
     }
 
     var preventDisplaySleep: Bool {
@@ -208,12 +215,20 @@ class PowerAssertionManager {
             if result == kIOReturnSuccess {
                 createdIDs.append(id)
             } else {
-                // Partial failure: roll back any assertions we managed to
-                // create so we don't end up in a half-active state.
-                for leaked in createdIDs { IOPMAssertionRelease(leaked) }
+                // Best-effort, NOT all-or-nothing: one assertion type failing
+                // (PreventSystemSleep can be refused depending on power state /
+                // context) must not abort the others — especially the display
+                // assertion, which is the user's explicit "keep the screen on"
+                // request. The old code rolled everything back and returned here,
+                // so a single failure silently let the monitor sleep. Log + keep going.
                 NSLog("IOPMAssertionCreateWithName failed for %@: 0x%@", type, String(result, radix: 16))
-                return
             }
+        }
+
+        // Only a total failure (no assertion at all) is fatal.
+        guard !createdIDs.isEmpty else {
+            NSLog("Espresso: no power assertions could be created — staying inactive")
+            return
         }
 
         assertionIDs = createdIDs

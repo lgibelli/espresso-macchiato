@@ -2,66 +2,41 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleDevelopmentRegion</key>
-    <string>en</string>
-    <key>CFBundleExecutable</key>
-    <string>Espresso</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>CFBundleIconName</key>
-    <string>AppIcon</string>
-    <key>CFBundleIdentifier</key>
-    <string>it.salamacchine.espressomacchiato</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>CFBundleName</key>
-    <string>Espresso</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <!--
-        Single source of truth for the app version — the pbxproj configs
-        deliberately do NOT set MARKETING_VERSION / CURRENT_PROJECT_VERSION,
-        and notarize.sh reads the release version from here too.
-    -->
-    <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
-    <key>CFBundleVersion</key>
-    <string>1</string>
-    <key>LSApplicationCategoryType</key>
-    <string>public.app-category.utilities</string>
-    <!--
-        Substituted by Xcode at build time, so each configuration stamps
-        its own floor: 12.0 for Debug/Release (Developer ID), 13.0 for
-        ReleaseMAS (the sandboxed build needs SMAppService for login
-        items). build.sh expands it with sed for the plain swiftc build.
-    -->
-    <key>LSMinimumSystemVersion</key>
-    <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
-    <key>LSUIElement</key>
-    <true/>
-    <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2026 Luca Gibelli. Licensed under the Apache License, Version 2.0.</string>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <!--
-        Sparkle auto-update (Developer ID build only). The MAS build is
-        gated with `#if !MAS` in main.swift and never touches these keys,
-        but they're harmless metadata in a MAS binary so we leave them
-        here rather than maintaining two Info.plist files.
-
-        Before the Developer ID build can actually deliver updates:
-          1. Generate an EdDSA key pair with Sparkle's `generate_keys`
-             tool and paste the public key into SUPublicEDKey below.
-          2. Replace SUFeedURL with the real appcast URL you'll host.
-          3. Sign each released update with `sign_update` and include
-             the signature in the appcast entry.
-        See README.md → "Publishing updates" for the full flow.
-    -->
-    <key>SUFeedURL</key>
-    <string>https://espresso.nervoussystems.com/appcast.xml</string>
-    <key>SUPublicEDKey</key>
-    <string></string>
-    <key>SUEnableAutomaticChecks</key>
-    <true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>Espresso</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>it.salamacchine.espressomacchiato</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Espresso</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.1</string>
+	<key>CFBundleVersion</key>
+	<string>2</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 Luca Gibelli. Licensed under the Apache License, Version 2.0.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://espresso.nervoussystems.com/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string></string>
 </dict>
 </plist>

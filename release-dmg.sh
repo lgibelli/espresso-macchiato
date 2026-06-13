@@ -83,12 +83,24 @@ notary_submit "$ZIP_TMP"
 xcrun stapler staple "$APP_PATH"
 rm -f "$ZIP_TMP"
 
-say "4/6  Build .dmg (stapled app + drag-to-Applications)"
-DMG_STAGE="$BUILD_DIR/dmg-stage"
-rm -rf "$DMG_STAGE"; mkdir -p "$DMG_STAGE"
-cp -R "$APP_PATH" "$DMG_STAGE/"
-ln -s /Applications "$DMG_STAGE/Applications"
-hdiutil create -quiet -volname "$APP_NAME" -srcfolder "$DMG_STAGE" -ov -format UDZO "$DMG_PATH"
+say "4/6  Build styled .dmg with appdmg (background + drag-to-Applications)"
+# appdmg writes the .DS_Store itself (no AppleScript), so the background + icon
+# layout survive headless CI. Spec is generated inline (paths are dynamic).
+APPDMG_SPEC="$BUILD_DIR/appdmg.json"
+cat > "$APPDMG_SPEC" <<JSON
+{
+  "title": "$APP_NAME",
+  "background": "$PROJECT_ROOT/dmg/background.png",
+  "icon-size": 128,
+  "window": { "size": { "width": 660, "height": 440 } },
+  "contents": [
+    { "x": 165, "y": 220, "type": "file", "path": "$APP_PATH" },
+    { "x": 495, "y": 220, "type": "link", "path": "/Applications" }
+  ]
+}
+JSON
+rm -f "$DMG_PATH"
+npx --yes appdmg "$APPDMG_SPEC" "$DMG_PATH"
 
 say "5/6  Sign + notarize + staple the .dmg"
 codesign --force --timestamp --sign "$SIGN_ID" "$DMG_PATH"
