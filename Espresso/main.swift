@@ -38,6 +38,13 @@ app.run()
 // MARK: - Constants
 struct Constants {
     static let appName = "Espresso"
+
+    /// Marketing version, read from the app bundle's CFBundleShortVersionString
+    /// — the single source of truth (set by the Xcode project / Info.plist and
+    /// read identically by release-dmg.sh). Never hardcode a version string.
+    static var version: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+    }
     static let activeIcon = "cup.and.saucer.fill"
     static let inactiveIcon = "cup.and.saucer"
     static let watchedAppsKey = "WatchedApps"
@@ -895,7 +902,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showAbout() {
         let alert = NSAlert()
-        alert.messageText = "\(Constants.appName)"
+        let version = Constants.version
+        alert.messageText = version.isEmpty ? Constants.appName : "\(Constants.appName) \(version)"
         alert.informativeText = NSLocalizedString("about.body", comment: "About dialog body text")
         alert.alertStyle = .informational
         alert.icon = aboutDialogIcon()
