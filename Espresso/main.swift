@@ -1134,8 +1134,7 @@ final class UpdateChecker {
         // Only ever open https on a host we expect. A mistyped or tampered feed
         // must not be able to send anyone somewhere else.
         guard let u = URL(string: release.url), u.scheme == "https",
-              let host = u.host,
-              host.hasSuffix("salamacchine.it") || host.hasSuffix("github.com")
+              let host = u.host, Self.isAcceptableHost(host)
         else {
             NSLog("Update feed proposed an unacceptable URL; ignoring")
             return
@@ -1153,6 +1152,17 @@ final class UpdateChecker {
     func openDownloadPage() {
         guard let release = available, let u = URL(string: release.url) else { return }
         NSWorkspace.shared.open(u)
+    }
+
+    /// Matches a domain or a subdomain of it, never a bare suffix.
+    ///
+    /// `hasSuffix("github.com")` alone also accepts "notgithub.com" and
+    /// "xgithub.com", which anyone can register. The boundary must be a label
+    /// separator, so compare the whole host or require a leading dot.
+    static func isAcceptableHost(_ host: String) -> Bool {
+        let allowed = ["salamacchine.it", "github.com"]
+        let h = host.lowercased()
+        return allowed.contains { h == $0 || h.hasSuffix("." + $0) }
     }
 
     /// Numeric per component, so 1.10.0 sorts above 1.9.0.
