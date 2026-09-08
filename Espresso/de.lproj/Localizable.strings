@@ -38,6 +38,7 @@
 
 /* Menü: Fußbereich */
 "Check for Updates…" = "Nach Updates suchen…";
+"Download Version %@…" = "Version %@ laden…";
 "About %@…" = "Über %@…";
 "Quit %@" = "%@ beenden";
 

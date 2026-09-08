@@ -38,6 +38,7 @@
 
 /* Menu : pied */
 "Check for Updates…" = "Rechercher des mises à jour…";
+"Download Version %@…" = "Télécharger la version %@…";
 "About %@…" = "À propos de %@…";
 "Quit %@" = "Quitter %@";
 

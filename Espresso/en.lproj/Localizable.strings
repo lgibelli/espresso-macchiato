@@ -38,6 +38,7 @@
 
 /* Menu: footer */
 "Check for Updates…" = "Check for Updates…";
+"Download Version %@…" = "Download Version %@…";
 "About %@…" = "About %@…";
 "Quit %@" = "Quit %@";
 

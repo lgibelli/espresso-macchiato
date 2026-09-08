@@ -38,6 +38,7 @@
 
 /* Menu: rodapé */
 "Check for Updates…" = "Buscar atualizações…";
+"Download Version %@…" = "Transferir a versão %@…";
 "About %@…" = "Sobre o %@…";
 "Quit %@" = "Encerrar o %@";
 

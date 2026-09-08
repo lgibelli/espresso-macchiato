@@ -38,6 +38,7 @@
 
 /* 菜单：底部 */
 "Check for Updates…" = "检查更新…";
+"Download Version %@…" = "下载版本 %@…";
 "About %@…" = "关于 %@…";
 "Quit %@" = "退出 %@";
 

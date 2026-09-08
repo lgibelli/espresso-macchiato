@@ -32,9 +32,5 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 Luca Gibelli. Licensed under the Apache License, Version 2.0.</string>
-	<key>SUEnableAutomaticChecks</key>
-	<false/>
-	<key>SUFeedURL</key>
-	<string>https://www.salamacchine.it/apps/espresso/appcast.xml</string>
 </dict>
 </plist>

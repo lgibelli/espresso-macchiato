@@ -16,18 +16,14 @@ import Cocoa
 import IOKit.pwr_mgt
 import ServiceManagement
 
-// Sparkle auto-update, only in the Developer ID build.
+// Update checking, only in the Developer ID build.
 //
 //   `!MAS`                → Mac App Store build has `MAS` set as a Swift
 //                            compilation condition (see project.pbxproj
-//                            ReleaseMAS config). The App Store owns
-//                            updates there, so we skip Sparkle entirely.
-//   `canImport(Sparkle)`  → lets this file compile cleanly *before* the
-//                            Sparkle SPM package is added to the project,
-//                            so the repo isn't broken mid-integration.
-#if !MAS && canImport(Sparkle)
-import Sparkle
-#endif
+//                            ReleaseMAS config). The App Store owns updates
+//                            there, so the update check is excluded entirely.
+//                            Shipping our own updater in a MAS build would
+//                            also fail App Review.
 
 // MARK: - App Entry Point
 let app = NSApplication.shared
@@ -385,21 +381,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// update it without rebuilding the whole menu.
     private static let timerItemTag = 999
 
-    #if !MAS && canImport(Sparkle)
-    /// Handles update checks for the Developer ID build. The MAS build
-    /// gets updates via the App Store and never instantiates this.
-    ///
-    /// `startingUpdater: true` wires Sparkle up to the standard scheduled
-    /// check cadence (once every 24 h by default) and shows the stock
-    /// Cocoa update UI when a new version is available. Feed URL and the
-    /// EdDSA public key are read from Info.plist (SUFeedURL /
-    /// SUPublicEDKey).
-    private lazy var updaterController: SPUStandardUpdaterController =
-        SPUStandardUpdaterController(
-            startingUpdater: true,
-            updaterDelegate: nil,
-            userDriverDelegate: nil
-        )
+    #if !MAS
+    /// Update checking for the Developer ID build. The MAS build gets updates
+    /// through the App Store and never creates this.
+    private lazy var updateChecker = UpdateChecker { [weak self] in
+        self?.buildMenu()
+    }
     #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -411,10 +398,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupCaffeinateCallbacks()
         setupAppWatcher()
 
-        #if !MAS && canImport(Sparkle)
-        // Touching the lazy var instantiates SPUStandardUpdaterController,
-        // which (with startingUpdater: true) schedules the periodic check.
-        _ = updaterController
+        #if !MAS
+        updateChecker.start()
         #endif
     }
 
@@ -785,15 +770,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Update check (Developer ID build only), About, and Quit.
     private func buildFooterSection(into menu: NSMenu) {
-        #if !MAS && canImport(Sparkle)
-        // Manual update check — only meaningful in the Developer ID build.
-        // The MAS build gets updates through the App Store.
-        let updateItem = NSMenuItem(
-            title: NSLocalizedString("Check for Updates…", comment: "Menu item: Sparkle manual update check"),
-            action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
-            keyEquivalent: ""
-        )
-        updateItem.target = updaterController
+        #if !MAS
+        // Only meaningful in the Developer ID build; the MAS build gets updates
+        // through the App Store.
+        let updateItem: NSMenuItem
+        if let release = updateChecker.available {
+            updateItem = NSMenuItem(
+                title: String(format: NSLocalizedString("Download Version %@…", comment: "Menu item: an update is available; %@ is the version"), release.version),
+                action: #selector(downloadUpdate), keyEquivalent: ""
+            )
+        } else {
+            updateItem = NSMenuItem(
+                title: NSLocalizedString("Check for Updates…", comment: "Menu item: manual update check"),
+                action: #selector(checkForUpdates), keyEquivalent: ""
+            )
+        }
+        updateItem.target = self
         menu.addItem(updateItem)
         #endif
 
@@ -818,6 +810,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Actions
+    #if !MAS
+    @objc private func checkForUpdates() {
+        updateChecker.check()
+    }
+
+    @objc private func downloadUpdate() {
+        updateChecker.openDownloadPage()
+    }
+    #endif
+
     @objc private func toggleAction() {
         // Menu "Start / Stop Brewing" — an explicit, duration-less toggle.
         // The icon click covers the timed 30-min one-tap case; this menu
@@ -1043,3 +1045,129 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
+
+// MARK: - Update checking (Developer ID build only)
+
+#if !MAS
+/// Checks a small JSON feed for a newer release and surfaces it in the menu.
+///
+/// Deliberately does not download or install anything. An updater that fetches
+/// and executes code makes its feed a way to run arbitrary software on every
+/// user's machine, which is why Sparkle requires the feed to be signed with an
+/// EdDSA key. Reporting a version and opening the download page keeps Gatekeeper
+/// in the loop: the user installs a notarised build the same way they did the
+/// first time.
+///
+/// The MAS build excludes this entirely and updates through the App Store.
+final class UpdateChecker {
+
+    struct Release: Decodable {
+        let version: String
+        let url: String
+        let notes: String?
+    }
+
+    private static let feedURL = URL(string: "https://www.salamacchine.it/apps/espresso/latest.json")!
+    private static let interval: TimeInterval = 24 * 60 * 60
+    private static let lastCheckKey = "lastUpdateCheck"
+
+    /// Set when a newer version exists. Read on the main thread only.
+    private(set) var available: Release?
+
+    private let onChange: () -> Void
+    private var timer: Timer?
+
+    /// - Parameter onChange: called on the main thread when `available` changes,
+    ///   so the menu can be rebuilt.
+    init(onChange: @escaping () -> Void) {
+        self.onChange = onChange
+    }
+
+    var currentVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+    }
+
+    func start() {
+        let t = Timer(timeInterval: Self.interval, repeats: true) { [weak self] _ in
+            self?.checkIfDue()
+        }
+        t.tolerance = 60 * 60   // let the system batch this wake-up
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+
+        // Deferred so a check never competes with launch.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
+            self?.checkIfDue()
+        }
+    }
+
+    private func checkIfDue() {
+        let last = UserDefaults.standard.double(forKey: Self.lastCheckKey)
+        if last > 0, Date().timeIntervalSince1970 - last < Self.interval { return }
+        check()
+    }
+
+    func check() {
+        var request = URLRequest(url: Self.feedURL)
+        request.timeoutInterval = 15
+        request.setValue("Espresso/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self else { return }
+            if let error {
+                NSLog("Update check failed: %@", error.localizedDescription)
+                return
+            }
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+                  let data, let release = try? JSONDecoder().decode(Release.self, from: data)
+            else {
+                NSLog("Update check: unusable response")
+                return
+            }
+            DispatchQueue.main.async { self.apply(release) }
+        }.resume()
+    }
+
+    private func apply(_ release: Release) {
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.lastCheckKey)
+
+        // Only ever open https on a host we expect. A mistyped or tampered feed
+        // must not be able to send anyone somewhere else.
+        guard let u = URL(string: release.url), u.scheme == "https",
+              let host = u.host,
+              host.hasSuffix("salamacchine.it") || host.hasSuffix("github.com")
+        else {
+            NSLog("Update feed proposed an unacceptable URL; ignoring")
+            return
+        }
+
+        let newer = Self.isNewer(release.version, than: currentVersion)
+        let changed = (newer ? release.version : nil) != available?.version
+        available = newer ? release : nil
+        if newer {
+            NSLog("Espresso: update available %@ (running %@)", release.version, currentVersion)
+        }
+        if changed { onChange() }
+    }
+
+    func openDownloadPage() {
+        guard let release = available, let u = URL(string: release.url) else { return }
+        NSWorkspace.shared.open(u)
+    }
+
+    /// Numeric per component, so 1.10.0 sorts above 1.9.0.
+    static func isNewer(_ candidate: String, than current: String) -> Bool {
+        func parts(_ s: String) -> [Int] {
+            s.split(whereSeparator: { !$0.isNumber }).map { Int($0) ?? 0 }
+        }
+        let a = parts(candidate), b = parts(current)
+        for i in 0..<max(a.count, b.count) {
+            let x = i < a.count ? a[i] : 0
+            let y = i < b.count ? b[i] : 0
+            if x != y { return x > y }
+        }
+        return false
+    }
+}
+#endif
+
