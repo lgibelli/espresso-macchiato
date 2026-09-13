@@ -1,13 +1,13 @@
 #!/bin/bash
 #
-# submit_mas.sh — archive, sign, wrap in .pkg, and upload Espresso Macchiato
-# to App Store Connect for Mac App Store distribution.
+# submit_mas.sh — archive, sign, and wrap Espresso Macchiato in a .pkg for
+# Mac App Store distribution, then hand it to Transporter for delivery.
 #
-# This is the MAS counterpart to notarize.sh. The two pipelines share the same
-# source code and Xcode project, but use different build configurations, signing
-# certs, and wrapping formats:
+# This is the MAS counterpart to release-dmg.sh. The two pipelines share the
+# same source code and Xcode project, but use different build configurations,
+# signing certs, and wrapping formats:
 #
-#                     notarize.sh            submit_mas.sh (this file)
+#                     release-dmg.sh         submit_mas.sh (this file)
 #   ------------  ---------------------  --------------------------------
 #   Config         Release                ReleaseMAS
 #   Cert (.app)    Developer ID App       Apple Distribution
@@ -15,9 +15,15 @@
 #   Entitlements   (none)                 Espresso/Espresso-MAS.entitlements
 #                                          (App Sandbox ON)
 #   Provisioning   (none)                 Mac App Store profile
-#   Delivers to    Apple notary service   App Store Connect
+#   Delivers to    Apple notary service   Transporter → App Store Connect
 #   Ships as       Notarized .zip on      Mac App Store listing
 #                  GitHub release
+#
+# The upload is left to Transporter on purpose. `altool` was the old CLI path
+# but its upload subcommand (--upload-app) is deprecated, and its replacement
+# wants an Apple ID + app-specific password or an API key wired into this
+# script. Transporter is Apple's supported, no-credentials-in-repo way to
+# deliver the package.
 #
 # Prereqs (one-time):
 #
@@ -28,39 +34,27 @@
 #
 #   2. Bundle ID "it.salamacchine.espressomacchiato" registered in
 #      https://developer.apple.com/account/resources/identifiers
-#      (Admin/App Manager role required)                          ⏳ pending
 #
 #   3. Mac App Store provisioning profile for that bundle ID, bound to the
-#      Apple Distribution cert, downloaded and installed. Embed it by
-#      setting PROVISIONING_PROFILE_SPECIFIER in the Xcode project (or let
-#      Xcode auto-resolve if the profile is on disk at
-#      ~/Library/MobileDevice/Provisioning\ Profiles/)             ⏳ pending
+#      Apple Distribution cert, downloaded and installed. Embedded via
+#      PROVISIONING_PROFILE_SPECIFIER in the Xcode project ("Espresso
+#      Macchiato MAS").
 #
 #   4. App record created in App Store Connect:
 #      https://appstoreconnect.apple.com/apps → + → New App
 #      Platform: macOS, Bundle ID: it.salamacchine.espressomacchiato,
-#      SKU: any string, Primary Language: English                  ⏳ pending
+#      SKU: any string, Primary Language: English
 #
-#   5. App-specific password stored in the login keychain as the generic
-#      item "espresso-altool" — the altool calls below read it via
-#      @keychain:espresso-altool. NOTE: this is separate from the
-#      notarytool profile "espresso-notary" (altool cannot read
-#      notarytool profiles). Store it once with:
-#        xcrun altool --store-password-in-keychain-item "espresso-altool" \
-#          --username "<your apple id email>" \
-#          --password "<app-specific-password>"
+#   5. Transporter installed (free on the Mac App Store). If you prefer the
+#      command line, `xcrun iTMSTransporter` ships with Xcode — but then you
+#      are back to supplying credentials yourself.
 #
 set -euo pipefail
 
 source "$(dirname "$0")/build-common.sh"
 require_team_id
-require_apple_id
 
 CONFIG="ReleaseMAS"
-# Apple ID used for altool validate/upload. Set it in your environment or
-# release.env (see release.env.example), or override per-machine with
-#   APPLE_ID=someone@example.com ./submit_mas.sh
-ALTOOL_KEYCHAIN_ITEM="espresso-altool"
 # Bundle ID comes from Info.plist (the single source of truth) so the
 # provisioning-profile mapping below can't drift from the app.
 BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PROJECT_ROOT/Espresso/Info.plist")
@@ -86,19 +80,18 @@ security find-identity -v -p basic 2>/dev/null | \
        Create a 'Mac Installer Distribution' certificate
        at https://developer.apple.com/account/resources/certificates → Mac Installer Distribution"
 
-security find-generic-password -s "$ALTOOL_KEYCHAIN_ITEM" >/dev/null 2>&1 || \
-  security find-generic-password -l "$ALTOOL_KEYCHAIN_ITEM" >/dev/null 2>&1 || \
-  die "Keychain item '$ALTOOL_KEYCHAIN_ITEM' missing — altool auth will fail.
-       Store it: xcrun altool --store-password-in-keychain-item '$ALTOOL_KEYCHAIN_ITEM' \\
-                   --username '$APPLE_ID' --password '<app-specific-password>'"
+[ -d "/Applications/Transporter.app" ] || \
+  die "Transporter.app not found in /Applications.
+       Install it free from the Mac App Store, or upload the .pkg yourself
+       with 'xcrun iTMSTransporter'."
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
-say "1/5  Archive ($CONFIG, sandbox on, Apple Distribution signing)"
+say "1/3  Archive ($CONFIG, sandbox on, Apple Distribution signing)"
 do_archive "$CONFIG" "$ARCHIVE_PATH"
 
-say "2/5  Write MAS export options"
+say "2/3  Write MAS export options"
 cat > "$EXPORT_OPTIONS" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -125,28 +118,19 @@ cat > "$EXPORT_OPTIONS" <<PLIST
 </plist>
 PLIST
 
-say "3/5  Export .pkg from archive (signed with Mac Installer Distribution)"
+say "3/3  Export .pkg from archive (signed with Mac Installer Distribution)"
 do_export "$ARCHIVE_PATH" "$EXPORT_PATH" "$EXPORT_OPTIONS"
 
 [ -f "$PKG_PATH" ] || die "Exported .pkg not found at $PKG_PATH"
 
-say "4/5  Validate .pkg against App Store Connect"
-xcrun altool --validate-app \
-  --type macos \
-  --file "$PKG_PATH" \
-  --username "$APPLE_ID" \
-  --password "@keychain:$ALTOOL_KEYCHAIN_ITEM" \
-  --team-id "$TEAM_ID"
+say "Open the .pkg in Transporter"
+# `open -a` both launches Transporter and stages the package, so all that is
+# left is clicking Deliver. If this is the first run, sign in when prompted.
+open -a Transporter "$PKG_PATH"
 
-say "5/5  Upload to App Store Connect"
-xcrun altool --upload-app \
-  --type macos \
-  --file "$PKG_PATH" \
-  --username "$APPLE_ID" \
-  --password "@keychain:$ALTOOL_KEYCHAIN_ITEM" \
-  --team-id "$TEAM_ID"
-
-printf "\n\033[1;32m✅ UPLOADED\033[0m\n"
-echo "   Now go to https://appstoreconnect.apple.com/apps → Espresso Macchiato"
+printf "\n\033[1;32m✅ READY TO DELIVER\033[0m\n"
+echo "   Package: $PKG_PATH"
+echo "   Transporter is open with it staged — click Deliver."
+echo "   Then go to https://appstoreconnect.apple.com/apps → Espresso Macchiato"
 echo "   and fill in metadata, screenshots, then Submit for Review."
 printf "\n"

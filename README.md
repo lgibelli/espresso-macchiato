@@ -58,36 +58,44 @@ child processes behind if it crashes or is force-quit.
 
 ## Publishing updates (Developer ID build)
 
-The Developer ID build is pre-wired for [Sparkle](https://sparkle-project.org)
-auto-updates, but the updater is **not active**: Sparkle is not a dependency of
-this project, so `canImport(Sparkle)` is false and every `#if !MAS &&
-canImport(Sparkle)` block compiles out. The shipped binary links no Sparkle
-libraries at all. The Mac App Store build is excluded via the `MAS` compilation
-condition and gets its updates from the App Store.
+The Developer ID build checks for updates and **notifies**; it never downloads or
+installs anything by itself. An updater that fetches and runs code makes its feed
+a way to run arbitrary software on every user's machine, so it is deliberately
+kept out. Instead the app reads a small JSON feed, compares the version, and, if
+a newer one exists, adds a *Download Version X…* item to the menu that opens the
+download page. Gatekeeper stays in the loop: the user installs a notarised build
+the same way they did the first time. The Mac App Store build excludes the
+checker via the `MAS` compilation condition and updates through the App Store.
 
-An empty `SUPublicEDKey` does **not** keep the updater inert. Without an EdDSA
-key Sparkle still fetches and acts on the appcast, falling back to validating the
-update's code signature. What keeps the updater inert today is the absence of the
-Sparkle package, nothing else. Adding the package is therefore the step that
-arms everything, so do it last.
+The feed lives at
+`https://www.salamacchine.it/apps/espresso/latest.json` (source:
+`salamacchine/www/public/apps/espresso/latest.json`) and looks like:
 
-To switch updates on, in this order:
+```json
+{
+  "version": "1.0.2",
+  "url": "https://github.com/lgibelli/espresso-macchiato/releases/latest",
+  "notes": "See the release notes on GitHub."
+}
+```
 
-1. Generate an EdDSA key pair with Sparkle's `generate_keys` tool. The private
-   key goes into your login keychain; paste the public key into `SUPublicEDKey`
-   in `Espresso/Info.plist`. Without this, anyone able to serve the appcast can
-   choose which build users install.
-2. Point `SUFeedURL` at a host **you control** and can serve over HTTPS, and
-   publish the appcast there. It currently reads
-   `https://www.salamacchine.it/apps/espresso/appcast.xml`, which is a
-   placeholder path on a domain we own; the feed does not exist yet.
-3. Set `SUEnableAutomaticChecks` back to `true`.
-4. Only then add the Sparkle package in Xcode:
-   File → Add Package Dependencies… → `https://github.com/sparkle-project/Sparkle`.
+`UpdateChecker` (`Espresso/main.swift:1062`) fetches it at most once a day, and
+only ever opens an `https` URL on a host in its allowlist
+(`salamacchine.it` or `github.com` and their subdomains). The comparison is
+numeric per component, so `1.10.0` sorts above `1.9.0`. Update the feed's
+`version` field as part of each release so users are offered the new build.
 
-4. For each release: build with `./notarize.sh`, sign the resulting zip with
-   Sparkle's `sign_update`, and add an appcast entry carrying the version,
-   download URL, and `sparkle:edSignature`.
+## Release checklist
+
+1. Bump `CFBundleShortVersionString` (and `CFBundleVersion`) in
+   `Espresso/Info.plist`.
+2. Point `latest.json` on the website at the new version.
+3. Push a `release/<version>` branch (e.g. `release/1.0.3`). CI runs
+   `release-dmg.sh`, signs and notarises the app and the DMG, and publishes a
+   GitHub release with `Espresso-<version>.dmg` and the versionless
+   `Espresso-latest.dmg` that the site links to.
+4. Optionally run `./submit_mas.sh` to upload the Mac App Store build (see that
+   script for the one-time signing prerequisites).
 
 ## Uninstall
 
