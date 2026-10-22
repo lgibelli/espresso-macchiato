@@ -87,15 +87,29 @@ numeric per component, so `1.10.0` sorts above `1.9.0`. Update the feed's
 
 ## Release checklist
 
-1. Bump `CFBundleShortVersionString` (and `CFBundleVersion`) in
-   `Espresso/Info.plist`.
-2. Point `latest.json` on the website at the new version.
-3. Push a `release/<version>` branch (e.g. `release/1.0.3`). CI runs
-   `release-dmg.sh`, signs and notarises the app and the DMG, and publishes a
-   GitHub release with `Espresso-<version>.dmg` and the versionless
-   `Espresso-latest.dmg` that the site links to.
-4. Optionally run `./submit_mas.sh` to upload the Mac App Store build (see that
-   script for the one-time signing prerequisites).
+1. Bump `CFBundleShortVersionString` in `Espresso/Info.plist` (and
+   `CFBundleVersion`, which only the Developer ID build uses), commit and push.
+2. Push a `release/<version>` branch (e.g. `release/1.0.3`).
+   `.github/workflows/release-signed.yml` runs two jobs from that commit, both
+   in the `release` environment:
+   - **release** runs `release-dmg.sh` (sign, notarise and staple the app and
+     the DMG), attests the DMGs' provenance, and puts
+     `Espresso-<version>.dmg` and the versionless `Espresso-latest.dmg` on a
+     *draft* GitHub release.
+   - **app-store** runs `./submit_mas.sh --upload`: the sandboxed build, signed
+     for the store, validated and uploaded to App Store Connect. Its build
+     number comes from the version and the run (1.0.3 → `10003.<run>`), so a
+     branch can run again. It shows in TestFlight once processed.
+3. Read the draft on GitHub and publish it; that is what moves
+   `releases/latest/download/Espresso-latest.dmg` to it. Then point
+   `latest.json` on the website at the new version.
+4. In App Store Connect, pick the build for the version and Submit for Review.
+
+Anyone can check that a DMG came from this repository and commit with
+`gh attestation verify Espresso-<version>.dmg --repo lgibelli/espresso-macchiato`.
+The secrets and variables the workflow needs are listed at the top of it.
+`./submit_mas.sh` also runs locally (validate only; `--upload` to send), with
+the settings in `release.env` (see `release.env.example`).
 
 ## Uninstall
 

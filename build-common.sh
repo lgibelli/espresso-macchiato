@@ -26,7 +26,7 @@ require_team_id() {
        release.env.example to release.env and fill in your Apple Team ID."
 }
 
-# do_archive <configuration> <archive-path>
+# do_archive <configuration> <archive-path> [build settings…]
 #
 # xcodebuild output is filtered down to the lines that matter; `|| true`
 # keeps grep's "no matches" exit from killing a `set -e` script — callers
@@ -39,6 +39,7 @@ do_archive() {
     -archivePath "$2" \
     -destination "generic/platform=macOS" \
     DEVELOPMENT_TEAM="$TEAM_ID" \
+    "${@:3}" \
     | grep -E "^(\*\*|error:|warning:)" || true
 }
 

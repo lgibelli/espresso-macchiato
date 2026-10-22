@@ -1,7 +1,14 @@
 #!/bin/bash
 #
-# submit_mas.sh — archive, sign, and wrap Espresso Macchiato in a .pkg for
-# Mac App Store distribution, then hand it to Transporter for delivery.
+# submit_mas.sh — build Espresso Macchiato for the Mac App Store, sign it,
+# wrap it in an installer package, have App Store Connect validate it, and
+# with --upload send it there as a new build. Runs locally, or in CI via
+# .github/workflows/release-signed.yml (the app-store job).
+#
+#   ./submit_mas.sh             build-mas/Espresso-<version>-<build>.pkg, validated
+#   ./submit_mas.sh --upload    and upload it, as a new build of the app
+#   BUILD_NUMBER=10003.1 ./submit_mas.sh --upload
+#                               another upload of the same version
 #
 # This is the MAS counterpart to release-dmg.sh. The two pipelines share the
 # same source code and Xcode project, but use different build configurations,
@@ -11,126 +18,161 @@
 #   ------------  ---------------------  --------------------------------
 #   Config         Release                ReleaseMAS
 #   Cert (.app)    Developer ID App       Apple Distribution
-#   Cert (.pkg)    (none — ships .zip)    Mac Installer Distribution
+#   Cert (.pkg)    (none — ships .dmg)    Mac Installer Distribution
 #   Entitlements   (none)                 Espresso/Espresso-MAS.entitlements
 #                                          (App Sandbox ON)
 #   Provisioning   (none)                 Mac App Store profile
-#   Delivers to    Apple notary service   Transporter → App Store Connect
-#   Ships as       Notarized .zip on      Mac App Store listing
+#   Delivers to    Apple notary service   altool → App Store Connect
+#   Ships as       Notarized .dmg on      Mac App Store listing
 #                  GitHub release
 #
-# The upload is left to Transporter on purpose. `altool` was the old CLI path
-# but its upload subcommand (--upload-app) is deprecated, and its replacement
-# wants an Apple ID + app-specific password or an API key wired into this
-# script. Transporter is Apple's supported, no-credentials-in-repo way to
-# deliver the package.
+# Build number: App Store Connect takes each CFBundleVersion once, so this
+# script derives it from the version — major × 10000 + minor × 100 + patch,
+# 1.0.3 is 10003 — and CI appends its run number (10003.7) so a release
+# branch can run again. BUILD_NUMBER overrides both. Info.plist's own
+# CFBundleVersion only reaches the Developer ID build.
 #
-# Prereqs (one-time):
+# Needs (release.env or the environment; see release.env.example):
+#   TEAM_ID              the Apple Developer team id
+#   APP_STORE_PROFILE    the app's Mac App Store provisioning profile
+#   ASC_KEY_JSON         an App Store Connect API key's details as JSON
+#                        ({"key_id", "issuer_id", "key_filepath"}), or
+#                        APPLE_API_KEY_ID and APPLE_API_ISSUER, with the key
+#                        in ~/.appstoreconnect/private_keys/AuthKey_<id>.p8
+# and, in the keychain, the team's "Apple Distribution" and "Mac Installer
+# Distribution" (or "3rd Party Mac Developer Installer") identities.
 #
-#   1. All three certs installed in login keychain (issued to your team):
-#        - Developer ID Application: <Your Company> (<TEAM_ID>)
-#        - Apple Distribution: <Your Company> (<TEAM_ID>)
-#        - Mac Installer Distribution: <Your Company> (<TEAM_ID>)
-#
-#   2. Bundle ID "it.salamacchine.espressomacchiato" registered in
-#      https://developer.apple.com/account/resources/identifiers
-#
-#   3. Mac App Store provisioning profile for that bundle ID, bound to the
-#      Apple Distribution cert, downloaded and installed. Embedded via
-#      PROVISIONING_PROFILE_SPECIFIER in the Xcode project ("Espresso
-#      Macchiato MAS").
-#
-#   4. App record created in App Store Connect:
-#      https://appstoreconnect.apple.com/apps → + → New App
-#      Platform: macOS, Bundle ID: it.salamacchine.espressomacchiato,
-#      SKU: any string, Primary Language: English
-#
-#   5. Transporter installed (free on the Mac App Store). If you prefer the
-#      command line, `xcrun iTMSTransporter` ships with Xcode — but then you
-#      are back to supplying credentials yourself.
+# The app record must exist in App Store Connect first (Apps → New App). The
+# upload adds a build; the listing, and Submit for Review, happen there.
 #
 set -euo pipefail
 
 source "$(dirname "$0")/build-common.sh"
 require_team_id
 
+UPLOAD=false
+for arg in "$@"; do
+  case "$arg" in
+    --upload) UPLOAD=true ;;
+    *) die "unknown option: $arg (the only one is --upload)" ;;
+  esac
+done
+
 CONFIG="ReleaseMAS"
-# Bundle ID comes from Info.plist (the single source of truth) so the
-# provisioning-profile mapping below can't drift from the app.
-BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PROJECT_ROOT/Espresso/Info.plist")
+INFO_PLIST="$PROJECT_ROOT/Espresso/Info.plist"
+# Bundle ID and version come from Info.plist, the single source of truth.
+BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$INFO_PLIST")
+VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$INFO_PLIST")
+
+if [ -z "${BUILD_NUMBER:-}" ]; then
+  [[ "$VERSION" =~ ^([0-9]+)\.([0-9]{1,2})(\.([0-9]{1,2}))?$ ]] || \
+    die "can't derive a build number from version '$VERSION' (want x.y.z, y and z below 100)"
+  BUILD_NUMBER=$(( 10#${BASH_REMATCH[1]} * 10000 + 10#${BASH_REMATCH[2]} * 100 + 10#${BASH_REMATCH[4]:-0} ))
+  if [ -n "${BUILD_RUN:-}" ]; then
+    BUILD_NUMBER="$BUILD_NUMBER.$BUILD_RUN"
+  fi
+fi
 
 BUILD_DIR="$PROJECT_ROOT/build-mas"
-ARCHIVE_PATH="$BUILD_DIR/$APP_NAME.xcarchive"
-EXPORT_PATH="$BUILD_DIR/export"
-PKG_PATH="$EXPORT_PATH/$APP_NAME.pkg"
-EXPORT_OPTIONS="$BUILD_DIR/exportOptions.plist"
+ARCHIVE_PATH="$BUILD_DIR/$APP_NAME-$VERSION-$BUILD_NUMBER.xcarchive"
+APP="$BUILD_DIR/$APP_NAME.app"
+ENT="$BUILD_DIR/$APP_NAME.entitlements"
+PKG="$BUILD_DIR/$APP_NAME-$VERSION-$BUILD_NUMBER.pkg"
+ALTOOL_LOG="$BUILD_DIR/altool.log"
 
 # Sanity checks — each of these is a specific prereq; fail early with guidance.
 command -v xcodebuild >/dev/null || die "xcodebuild not on PATH"
 
-security find-identity -v -p basic 2>/dev/null | \
-  grep -q "Apple Distribution: .*($TEAM_ID)" || \
-  die "Missing 'Apple Distribution' identity for team $TEAM_ID.
-       Create an 'Apple Distribution' certificate
-       at https://developer.apple.com/account/resources/certificates"
+[ -n "${APP_STORE_PROFILE:-}" ] || die "APP_STORE_PROFILE is not set.
+       Point it at the Mac App Store provisioning profile for $BUNDLE_ID
+       (release.env, or the environment)."
+PROFILE="${APP_STORE_PROFILE/#\~/$HOME}"
+[ -f "$PROFILE" ] || die "no provisioning profile at $PROFILE"
+[ "$(security cms -D -i "$PROFILE" | plutil -extract Entitlements.com\\.apple\\.application-identifier raw -)" \
+    = "$TEAM_ID.$BUNDLE_ID" ] || die "$PROFILE isn't the Mac App Store profile for $TEAM_ID.$BUNDLE_ID"
 
-security find-identity -v -p basic 2>/dev/null | \
-  grep -q "3rd Party Mac Developer Installer\|Mac Installer Distribution" || \
-  die "Missing 'Mac Installer Distribution' identity for team $TEAM_ID.
-       Create a 'Mac Installer Distribution' certificate
-       at https://developer.apple.com/account/resources/certificates → Mac Installer Distribution"
+# The API key, without ever printing it.
+if [ -n "${ASC_KEY_JSON:-}" ]; then
+  json="${ASC_KEY_JSON/#\~/$HOME}"
+  APPLE_API_KEY_ID="$(plutil -extract key_id raw "$json")"
+  APPLE_API_ISSUER="$(plutil -extract issuer_id raw "$json")"
+fi
+[ -n "${APPLE_API_KEY_ID:-}" ] && [ -n "${APPLE_API_ISSUER:-}" ] || \
+  die "no App Store Connect API key: set ASC_KEY_JSON, or APPLE_API_KEY_ID and APPLE_API_ISSUER"
+[ -f "$HOME/.appstoreconnect/private_keys/AuthKey_$APPLE_API_KEY_ID.p8" ] || \
+  die "the API key must be at ~/.appstoreconnect/private_keys/AuthKey_$APPLE_API_KEY_ID.p8, where altool looks"
 
-[ -d "/Applications/Transporter.app" ] || \
-  die "Transporter.app not found in /Applications.
-       Install it free from the Mac App Store, or upload the .pkg yourself
-       with 'xcrun iTMSTransporter'."
+identity() {
+  security find-identity -v -p basic 2>/dev/null | grep -E "\"($1): .*\\($TEAM_ID\\)\"" | head -1 \
+    | sed 's/.*"\(.*\)"/\1/' || true
+}
+SIGN_APP="$(identity "Apple Distribution")"
+SIGN_PKG="$(identity "Mac Installer Distribution|3rd Party Mac Developer Installer")"
+[ -n "$SIGN_APP" ] || die "Missing 'Apple Distribution' identity for team $TEAM_ID.
+       Create one at https://developer.apple.com/account/resources/certificates"
+[ -n "$SIGN_PKG" ] || die "Missing 'Mac Installer Distribution' identity for team $TEAM_ID.
+       Create one at https://developer.apple.com/account/resources/certificates"
 
-rm -rf "$BUILD_DIR"
+# Only this build's outputs are replaced: build-mas/ also keeps earlier
+# archives (their dSYMs) and whatever else lives there, like the App Store
+# screenshots.
+rm -rf "$ARCHIVE_PATH" "$APP" "$ENT" "$PKG" "$ALTOOL_LOG"
 mkdir -p "$BUILD_DIR"
 
-say "1/3  Archive ($CONFIG, sandbox on, Apple Distribution signing)"
-do_archive "$CONFIG" "$ARCHIVE_PATH"
+# Archived unsigned and signed below, as xcodebuild -exportArchive would:
+# exportArchive segfaults on the CI runners (see release-dmg.sh), and the
+# build number is only settled here.
+say "1/5  Archive ($CONFIG, sandbox on)"
+do_archive "$CONFIG" "$ARCHIVE_PATH" CODE_SIGNING_ALLOWED=NO
+ARCHIVED_APP="$ARCHIVE_PATH/Products/Applications/$APP_NAME.app"
+[ -d "$ARCHIVED_APP" ] || die "app not found in archive at $ARCHIVED_APP"
+ditto "$ARCHIVED_APP" "$APP"
 
-say "2/3  Write MAS export options"
-cat > "$EXPORT_OPTIONS" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>method</key>
-    <string>app-store-connect</string>
-    <key>destination</key>
-    <string>export</string>
-    <key>teamID</key>
-    <string>$TEAM_ID</string>
-    <key>signingStyle</key>
-    <string>manual</string>
-    <key>signingCertificate</key>
-    <string>Apple Distribution</string>
-    <key>installerSigningCertificate</key>
-    <string>3rd Party Mac Developer Installer</string>
-    <key>provisioningProfiles</key>
-    <dict>
-        <key>$BUNDLE_ID</key>
-        <string>Espresso Macchiato MAS</string>
-    </dict>
-</dict>
-</plist>
-PLIST
+say "2/5  Sign $VERSION ($BUILD_NUMBER) as: $SIGN_APP"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$APP/Contents/Info.plist"
+# Readable by all: CI writes the profile under umask 077, and the installer
+# makes every file root's.
+install -m 644 "$PROFILE" "$APP/Contents/embedded.provisionprofile"
+# The store wants the app's own entitlements plus who it is, as the profile
+# grants them.
+cp "$PROJECT_ROOT/Espresso/Espresso-MAS.entitlements" "$ENT"
+/usr/libexec/PlistBuddy -c "Add :com.apple.application-identifier string $TEAM_ID.$BUNDLE_ID" "$ENT"
+/usr/libexec/PlistBuddy -c "Add :com.apple.developer.team-identifier string $TEAM_ID" "$ENT"
+xattr -cr "$APP"
+codesign --force --timestamp --options runtime --sign "$SIGN_APP" --entitlements "$ENT" "$APP"
+codesign --verify --deep --strict "$APP"
+# Installed, everything is root's: what others can't read, nobody can check
+# the signature of, and App Store Connect refuses the package.
+private="$(find "$APP" \( -type d ! -perm -o+rx \) -o \( ! -type d ! -perm -o+r \))"
+[ -z "$private" ] || die "only root could read these once installed: $private"
 
-say "3/3  Export .pkg from archive (signed with Mac Installer Distribution)"
-do_export "$ARCHIVE_PATH" "$EXPORT_PATH" "$EXPORT_OPTIONS"
+say "3/5  Package, signed as: $SIGN_PKG"
+productbuild --component "$APP" /Applications --sign "$SIGN_PKG" "$PKG"
+pkgutil --check-signature "$PKG" | sed -n 1,3p
 
-[ -f "$PKG_PATH" ] || die "Exported .pkg not found at $PKG_PATH"
+KEY=(--apiKey "$APPLE_API_KEY_ID" --apiIssuer "$APPLE_API_ISSUER")
+# altool exits 0 even when App Store Connect refuses the package, so what it
+# prints on success is the only evidence.
+altool() { # <what it prints on success> <arguments…>
+  local ok="$1"
+  shift
+  xcrun altool "$@" 2>&1 | tee "$ALTOOL_LOG" || true
+  grep -q "$ok" "$ALTOOL_LOG" || die "App Store Connect refused the package (above)"
+}
 
-say "Open the .pkg in Transporter"
-# `open -a` both launches Transporter and stages the package, so all that is
-# left is clicking Deliver. If this is the first run, sign in when prompted.
-open -a Transporter "$PKG_PATH"
+say "4/5  Validate with App Store Connect"
+altool "No errors validating archive" --validate-app -f "$PKG" -t macos "${KEY[@]}"
 
-printf "\n\033[1;32m✅ READY TO DELIVER\033[0m\n"
-echo "   Package: $PKG_PATH"
-echo "   Transporter is open with it staged — click Deliver."
-echo "   Then go to https://appstoreconnect.apple.com/apps → Espresso Macchiato"
-echo "   and fill in metadata, screenshots, then Submit for Review."
+if $UPLOAD; then
+  say "5/5  Upload $VERSION ($BUILD_NUMBER)"
+  altool "No errors uploading archive" --upload-app -f "$PKG" -t macos "${KEY[@]}"
+  printf "\n\033[1;32m✅ UPLOADED\033[0m\n"
+  echo "   It shows in App Store Connect (and TestFlight) once it's processed,"
+  echo "   usually within the hour. Then pick the build for the version and"
+  echo "   Submit for Review."
+else
+  printf "\n\033[1;32m✅ VALIDATED\033[0m\n"
+  echo "   Package: $PKG"
+  echo "   ./submit_mas.sh --upload sends it."
+fi
 printf "\n"
