@@ -45,7 +45,6 @@ struct Constants {
     static let inactiveIcon = "cup.and.saucer"
     static let watchedAppsKey = "WatchedApps"
     static let preventDisplaySleepKey = "PreventDisplaySleep"
-    static let launchAtLoginKey = "LaunchAtLogin"
     static let showTimerInBarKey = "ShowTimerInBar"
     static let brewDurationsKey = "BrewDurations"
 
@@ -130,11 +129,6 @@ class Preferences {
     var preventDisplaySleep: Bool {
         get { defaults.bool(forKey: Constants.preventDisplaySleepKey) }
         set { defaults.set(newValue, forKey: Constants.preventDisplaySleepKey) }
-    }
-
-    var launchAtLogin: Bool {
-        get { defaults.bool(forKey: Constants.launchAtLoginKey) }
-        set { defaults.set(newValue, forKey: Constants.launchAtLoginKey) }
     }
 
     var showTimerInBar: Bool {
@@ -764,7 +758,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(toggleLaunchAtLogin(_:)), keyEquivalent: ""
         )
         loginItem.target = self
-        loginItem.state = prefs.launchAtLogin ? .on : .off
+        loginItem.state = isLaunchAtLoginEnabled ? .on : .off
         menu.addItem(loginItem)
     }
 
@@ -862,8 +856,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleLaunchAtLogin(_ sender: NSMenuItem) {
-        prefs.launchAtLogin.toggle()
-        setLaunchAtLogin(prefs.launchAtLogin)
+        setLaunchAtLogin(!isLaunchAtLoginEnabled)
         buildMenu()
     }
 
@@ -997,6 +990,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return nil
     }
 
+    /// Whether the app will actually open at login — read from the system,
+    /// never from a stored flag, so the menu checkmark stays truthful when
+    /// the user changes it in System Settings → Login Items or a
+    /// registration call fails.
+    private var isLaunchAtLoginEnabled: Bool {
+        if #available(macOS 13.0, *) {
+            return SMAppService.mainApp.status == .enabled
+        }
+        return FileManager.default.fileExists(atPath: launchAgentPlistURL.path)
+    }
+
+    /// LaunchAgent label and plist used for launch-at-login before macOS 13.
+    /// The label comes from the running bundle so it can't drift from
+    /// Info.plist.
+    private var launchAgentLabel: String {
+        Bundle.main.bundleIdentifier ?? "it.salamacchine.espressomacchiato"
+    }
+
+    private var launchAgentPlistURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/LaunchAgents/\(launchAgentLabel).plist")
+    }
+
     private func setLaunchAtLogin(_ enabled: Bool) {
         if #available(macOS 13.0, *) {
             do {
@@ -1008,15 +1024,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             } catch {
                 NSLog("Failed to set launch at login: %@", String(describing: error))
             }
+            // A login item the user switched off in System Settings can only
+            // be switched back on there — take them to it.
+            if enabled && SMAppService.mainApp.status == .requiresApproval {
+                SMAppService.openSystemSettingsLoginItems()
+            }
         } else {
             // For older macOS, use a LaunchAgent plist. Label and executable
             // path come from the running bundle so they can't drift from
             // Info.plist / the build settings.
-            let label = Bundle.main.bundleIdentifier ?? "it.salamacchine.espressomacchiato"
-            let launchAgentDir = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/LaunchAgents")
-            let plistPath = launchAgentDir
-                .appendingPathComponent("\(label).plist")
+            let label = launchAgentLabel
+            let plistPath = launchAgentPlistURL
+            let launchAgentDir = plistPath.deletingLastPathComponent()
 
             do {
                 if enabled {
